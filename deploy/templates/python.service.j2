@@ -1,0 +1,13 @@
+[Unit]
+Description=Python service {{ instance_name }}
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ instance_path }}
+ExecStart={{ venv_path }}/bin/python -m {{ exec_start }}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
