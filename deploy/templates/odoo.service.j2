@@ -1,0 +1,15 @@
+[Unit]
+Description=Odoo instance {{ instance_name }}
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory={{ instance_path }}
+ExecStart={{ venv_path }}/bin/python {{ instance_path }}/odoo-bin \
+    --config {{ instance_path }}/config/odoo.conf \
+    --addons-path {{ addons_path }}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

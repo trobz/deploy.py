@@ -89,7 +89,7 @@ file values, which take precedence over built-in defaults.
 **Signature**
 
 ```bash
-deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service]
+deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service] [-p <ssh_port>]
 ```
 
 **Arguments**
@@ -98,6 +98,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Logical name for the instance (used for paths and service name)             |
 | `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 | `repo_url`      | If not in config       | Git repository URL (e.g. `git@github.com:org/repo.git`)                     |
 
 **Options**
@@ -127,7 +128,8 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
    - **`python`**: create a virtual environment and install dependencies using `uv`:
      ```bash
      uv venv .venv
-     uv pip install -r requirements.txt
+     if [ -e requirements.txt ]; then uv pip install -r requirements.txt; fi
+     if [ -e pyproject.toml ]; then uv sync; fi
      ```
    - **`service`**: run the `build` command defined in the local `deploy.yml`
      (e.g. `npm ci && npm run build`, `cargo build --release`), executed remotely on the target
@@ -168,7 +170,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 **Signature**
 
 ```bash
-deploy [--config FILE] update <instance_name> [<ssh_host>] [--type odoo|python|service] [--db DATABASE]
+deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--type odoo|python|service] [--db DATABASE]
 ```
 
 **Arguments**
@@ -177,6 +179,7 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] [--type odoo|python|s
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Name of the previously configured instance                                  |
 | `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 
 **Options**
 
@@ -244,8 +247,8 @@ Hook semantics:
 
 6. **Update dependencies / rebuild**
 
-   - **`odoo`**: re-run `odoo-venv --project-dir ~/<instance_name>` to sync the virtual environment.
-   - **`python`**: run `uv pip install -r requirements.txt` (if the file exists).
+   - **`odoo`**: the script expects all changes in dependencies, even from odoo, are explicitly listed in requirements.txt, re-run `uv pip install -r requirements.txt` to sync the virtual environment.
+   - **`python`**: run `uv pip install -r requirements.txt` (if the file exists) or `uv sync` if the file pyproject.toml exists.
    - **`service`**: re-run the `build` command from `deploy.yml`.
 
 7. **Apply changes**
@@ -282,7 +285,7 @@ Hook semantics:
 **Signature**
 
 ```bash
-deploy [--config FILE] status <instance_name> [<ssh_host>]
+deploy [--config FILE] status <instance_name> [<ssh_host>] [-p <ssh_port>]
 ```
 
 **Arguments**
@@ -291,6 +294,7 @@ deploy [--config FILE] status <instance_name> [<ssh_host>]
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Name of the previously configured instance                                  |
 | `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 
 **Output**
 
