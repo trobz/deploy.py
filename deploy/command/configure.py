@@ -4,7 +4,6 @@ from typing import Any
 
 import click
 
-from deploy.utils.addons import get_addons_path
 from deploy.utils.config import load_config, resolve_options
 from deploy.utils.executor import Executor, ExecutorError
 from deploy.utils.render import render_unit
@@ -79,7 +78,8 @@ def configure(  # noqa: C901
         raise click.ClickException(msg)
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
-    instance_path = f"$HOME/{instance_name}"
+    home_dir = executor.capture("echo $HOME")
+    instance_path = f"{home_dir}/{instance_name}"
 
     # Step 2: Clone repository
     if _is_git_repo(executor, instance_path):
@@ -94,14 +94,16 @@ def configure(  # noqa: C901
         except ExecutorError as exc:
             msg = f"Git clone failed: {exc}"
             raise click.ClickException(msg) from exc
+    executor.run(
+        "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
+        cwd=instance_path,
+    )
 
     # Step 3: Set up environment
     click.echo(f"Setting up {eff_type} environment …")
-    addons_path: str | None = None
     try:
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
-            addons_path = get_addons_path(executor, instance_path)
         elif eff_type == "python":
             setup_python_venv(executor, instance_path, force=force)
         else:  # service
@@ -116,7 +118,6 @@ def configure(  # noqa: C901
     # Step 4: Install systemd unit
     click.echo("Installing systemd unit …")
     venv_path = f"{instance_path}/.venv"
-    exec_start: str = opts.get("exec_start", "")
 
     template_vars: dict[str, Any] = {
         "instance_name": instance_name,
@@ -124,11 +125,16 @@ def configure(  # noqa: C901
     }
     if eff_type == "odoo":
         template_vars["venv_path"] = venv_path
-        template_vars["addons_path"] = addons_path
-    elif eff_type == "python":
-        template_vars["venv_path"] = venv_path
-        template_vars["exec_start"] = exec_start
+        odoo_addons_path = executor.capture("which odoo-addons-path")
+        template_vars["odoo_addons_path"] = odoo_addons_path
     else:
+        exec_start: str = opts.get("exec_start", "")
+        if not exec_start:
+            msg = "exec_start is required for service or python type."
+            msg += " Set it in deploy.yml."
+            raise click.ClickException(msg)
+        if eff_type == "python":
+            template_vars["venv_path"] = venv_path
         template_vars["exec_start"] = exec_start
 
     try:

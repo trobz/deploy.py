@@ -69,7 +69,8 @@ def update(  # noqa: C901
     hooks: dict = opts.get("hooks", {})
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
-    instance_path = f"$HOME/{instance_name}"
+    home_dir = executor.capture("echo $HOME")
+    instance_path = f"{home_dir}/{instance_name}"
 
     def run_hooks(hook_name: str) -> bool:
         """Execute all commands for *hook_name*. Returns True if all succeeded."""
@@ -116,9 +117,10 @@ def update(  # noqa: C901
     try:
         if eff_type == "odoo":
             executor.run(
-                "if [ -e requirements.txt ]; then uv pip install -r requirements.txt; fi",
+                "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
                 cwd=instance_path,
             )
+            executor.run("odoo-venv update .venv --backup", cwd=instance_path)
         elif eff_type == "python":
             setup_python_deps(executor, instance_path)
         else:  # service

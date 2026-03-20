@@ -140,7 +140,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 
    - Unit file destination: `~/.config/systemd/user/<instance_name>.service`
    - Template variables per type:
-     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `addons_path`
+     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `odoo_addons_path`
      - **`python`**: `instance_name`, `instance_path`, `venv_path`, `exec_start`
      - **`service`**: `instance_name`, `instance_path`, `exec_start`
    - After writing the unit file, run:
@@ -354,7 +354,7 @@ odoo-myproject-production:
   db: myproject                           # Odoo only; defaults to instance_name if omitted
 
   # service / python only
-  exec_start: myapp.main:app              # module path for python; verbatim for service
+  exec_start: python -m myapp.main:app    # `python -m module path` or `python file.py` or `fastapi entry` for python; verbatim for service
   build: npm ci && npm run build          # service only
 
   # Hooks (update command)
@@ -395,9 +395,9 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 WorkingDirectory={{ instance_path }}
-ExecStart={{ venv_path }}/bin/python {{ instance_path }}/odoo-bin \
+ExecStart={{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
     --config {{ instance_path }}/config/odoo.conf \
-    --addons-path {{ addons_path }}
+    --addons-path $({{ odoo_addons_path }} {{ instance_path }})
 Restart=on-failure
 RestartSec=5s
 
@@ -415,7 +415,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={{ instance_path }}
-ExecStart={{ venv_path }}/bin/python -m {{ exec_start }}
+ExecStart={{ venv_path }}/bin/{{ exec_start }}
 Restart=on-failure
 RestartSec=5s
 
@@ -503,7 +503,8 @@ The following tools must be pre-installed on the target host:
 | `odoo-venv`       | `odoo` deployments   |
 | `odoo-addons-path`| `odoo` deployments   |
 | `uv`              | `python` deployments |
-| `click-odoo-upgrade` | `odoo` venv (not a local dep of `deploy`) |
+| `click-odoo-contrib` | `odoo` venv (not a local dep of `deploy`) |
+| `git-aggregator`  | `odoo` deployments   |
 
 For `service` deployments, any additional runtime or toolchain (Node.js, Ruby, Rust, etc.) must
 also be pre-installed; `deploy` only orchestrates `git pull`, the `build` command, and systemd
