@@ -103,7 +103,7 @@ def configure(  # noqa: C901
             setup_odoo_venv(executor, instance_path)
             addons_path = get_addons_path(executor, instance_path)
         elif eff_type == "python":
-            setup_python_venv(executor, instance_path)
+            setup_python_venv(executor, instance_path, force=force)
         else:  # service
             build_cmd: str | None = opts.get("build")
             if not build_cmd:

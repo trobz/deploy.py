@@ -12,9 +12,10 @@ def setup_odoo_venv(executor: Executor, instance_path: str) -> None:
     executor.run("uv pip install click-odoo-contrib", cwd=instance_path)
 
 
-def setup_python_venv(executor: Executor, instance_path: str) -> None:
+def setup_python_venv(executor: Executor, instance_path: str, force: bool = False) -> None:
     """Create a venv with ``uv`` and install dependencies from requirements.txt."""
-    executor.run("uv venv .venv", cwd=instance_path)
+    clear_flag = " --clear" if force else ""
+    executor.run(f"uv venv{clear_flag} .venv", cwd=instance_path)
     setup_python_deps(executor, instance_path)
 
 
