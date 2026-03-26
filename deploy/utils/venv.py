@@ -6,10 +6,9 @@ from deploy.utils.executor import Executor
 def setup_odoo_venv(executor: Executor, instance_path: str) -> None:
     """Create or update an Odoo virtual environment using ``odoo-venv``."""
     executor.run(
-        f"odoo-venv create --project-dir {instance_path}",
+        f"odoo-venv create --project-dir {instance_path} --preset project",
         cwd=instance_path,
     )
-    executor.run("uv pip install click-odoo-contrib", cwd=instance_path)
 
 
 def setup_python_venv(executor: Executor, instance_path: str, force: bool = False) -> None:
