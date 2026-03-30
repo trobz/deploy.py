@@ -60,7 +60,7 @@ def update(  # noqa: C901
             db=db,
         )
     except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
@@ -80,17 +80,26 @@ def update(  # noqa: C901
             try:
                 executor.run(cmd, cwd=instance_path)
             except ExecutorError as exc:
-                click.echo(f"Hook {hook_name!r} failed: {exc}", err=True)
+                click.secho(
+                    f"Hook {hook_name!r} failed: {exc}",
+                    fg="red",
+                    err=True,
+                )
                 return False
         return True
 
     # Step 2: pre-update hooks (non-blocking)
+    click.secho("\nRunning pre-update hooks…", fg="green")
     run_hooks("pre-update")
 
     # Step 3: pre-update-required hooks (blocking on failure)
+    click.secho("\nRunning pre-update-required hooks…", fg="green")
     if not run_hooks("pre-update-required"):
         run_hooks("pre-update-fail")
-        msg = "pre-update-required hook failed. Update aborted."
+        msg = click.style(
+            "pre-update-required hook failed. Update aborted.",
+            fg="red",
+        )
         raise click.ClickException(msg)
 
     # Step 4: pre-update-success
@@ -100,20 +109,23 @@ def update(  # noqa: C901
     try:
         executor.run(f"test -d {instance_path}/.git")
     except ExecutorError:
-        msg = f"Instance directory not found or not a git repo: ~/{instance_name}"
+        msg = click.style(
+            f"Instance directory not found or not a git repo: ~/{instance_name}",
+            fg="red",
+        )
         raise click.ClickException(msg) from None
 
-    click.echo("Pulling latest code …")
+    click.secho("\nPulling latest code …", fg="green")
     try:
         executor.run("git pull", cwd=instance_path)
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
-        msg = f"git pull failed: {exc}"
+        msg = click.style(f"git pull failed: {exc}", fg="red")
         raise click.ClickException(msg) from exc
 
     # Step 6: Update dependencies / rebuild
-    click.echo("Updating dependencies …")
+    click.secho("\nUpdating dependencies …", fg="green")
     try:
         if eff_type == "odoo":
             executor.run(
@@ -130,11 +142,11 @@ def update(  # noqa: C901
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
-        msg = f"Dependency update failed: {exc}"
+        msg = click.style(f"Dependency update failed: {exc}", fg="red")
         raise click.ClickException(msg) from exc
 
     # Step 7: Apply changes
-    click.echo("Applying changes …")
+    click.secho("\nApplying changes …", fg="green")
     try:
         if eff_type == "odoo":
             addons_path = get_addons_path(executor, instance_path)
@@ -146,11 +158,11 @@ def update(  # noqa: C901
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
-        msg = f"Restart/upgrade failed: {exc}"
+        msg = click.style(f"Restart/upgrade failed: {exc}", fg="red")
         raise click.ClickException(msg) from exc
 
     # Step 8: post-update hooks
     run_hooks("post-update")
     run_hooks("post-update-success")
 
-    click.echo(f"Instance {instance_name!r} updated successfully.")
+    click.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")

@@ -115,4 +115,9 @@ class Executor:
         to pass through the SSH command line.
         """
         b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        if self.verbose:
+            click.echo(f"Writing to {remote_path}\n{content}")
+        verbose = self.verbose
+        self.verbose = False
         self.run(f"echo '{b64}' | base64 -d > {remote_path}")
+        self.verbose = verbose
