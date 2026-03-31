@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-03-31)
+
+### Bug Fixes
+
+- Update: correct click-odoo-update statement
+  ([`aefee8e`](https://github.com/trobz/deploy.py/commit/aefee8e7fda8415cfc9eaeef8ce1061f0bbc386c))
+
+### Features
+
+- Improve configure and update commands
+  ([`5283f9c`](https://github.com/trobz/deploy.py/commit/5283f9c299978ad8d7e48c457730fe54072f197e))
+
+
 ## v0.2.0 (2026-03-26)
 
 ### Features
