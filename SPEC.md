@@ -354,7 +354,7 @@ odoo-myproject-production:
   db: myproject                           # Odoo only; defaults to instance_name if omitted
 
   # service / python only
-  exec_start: python -m myapp.main:app    # `python -m module path` or `python file.py` or `fastapi entry` for python; verbatim for service
+  exec_start: python -m myapp.main:app    # `python -m module path` or `python file.py` or `fastapi entry` for python, can omit for server.py; verbatim for service
   build: npm ci && npm run build          # service only
 
   # Hooks (update command)

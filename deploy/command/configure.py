@@ -66,7 +66,7 @@ def configure(  # noqa: C901
             deploy_type=deploy_type,
         )
     except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
@@ -74,7 +74,10 @@ def configure(  # noqa: C901
     eff_type: str = opts["type"]
 
     if not eff_repo_url:
-        msg = "repo_url is required. Provide it as an argument or set it in deploy.yml."
+        msg = click.style(
+            "repo_url is required. Provide it as an argument or set it in deploy.yml.",
+            fg="red",
+        )
         raise click.ClickException(msg)
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
@@ -84,15 +87,18 @@ def configure(  # noqa: C901
     # Step 2: Clone repository
     if _is_git_repo(executor, instance_path):
         if not force:
-            msg = f"Instance directory already exists: ~/{instance_name}\nUse --force to skip cloning and re-run setup."
+            msg = click.style(
+                f"Instance directory already exists: ~/{instance_name}\nUse --force to skip cloning and re-run setup.",
+                fg="yellow",
+            )
             raise click.ClickException(msg)
-        click.echo("Directory exists, skipping clone (--force).")
+        click.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
     else:
-        click.echo(f"Cloning {eff_repo_url} into ~/{instance_name} …")
+        click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name} …", fg="green")
         try:
             executor.run(f"git clone {eff_repo_url} $HOME/{instance_name}")
         except ExecutorError as exc:
-            msg = f"Git clone failed: {exc}"
+            msg = click.style(f"Git clone failed: {exc}", fg="red")
             raise click.ClickException(msg) from exc
     executor.run(
         "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
@@ -100,23 +106,30 @@ def configure(  # noqa: C901
     )
 
     # Step 3: Set up environment
-    click.echo(f"Setting up {eff_type} environment …")
+    click.secho(f"\nSetting up {eff_type} environment …", fg="green")
     try:
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
         elif eff_type == "python":
             setup_python_venv(executor, instance_path, force=force)
+            executor.run(
+                "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
+                cwd=instance_path,
+            )
         else:  # service
             build_cmd: str | None = opts.get("build")
             if not build_cmd:
-                msg = "build command is required for service type. Set it in deploy.yml."
+                msg = click.style(
+                    "build command is required for service type. Set it in deploy.yml.",
+                    fg="red",
+                )
                 raise click.ClickException(msg)
             executor.run(build_cmd, cwd=instance_path)
     except ExecutorError as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
     # Step 4: Install systemd unit
-    click.echo("Installing systemd unit …")
+    click.secho("\nInstalling systemd unit …", fg="green")
     venv_path = f"{instance_path}/.venv"
 
     template_vars: dict[str, Any] = {
@@ -130,8 +143,17 @@ def configure(  # noqa: C901
     else:
         exec_start: str = opts.get("exec_start", "")
         if not exec_start:
-            msg = "exec_start is required for service or python type."
-            msg += " Set it in deploy.yml."
+            res = executor.capture(
+                "if [ -f server.py ]; then echo server.py; fi",
+                cwd=instance_path,
+            )
+            if res == "server.py":
+                exec_start = "python server.py"
+        if not exec_start:
+            msg = click.style(
+                "exec_start is required for service or python type. Set it in deploy.yml.",
+                fg="red",
+            )
             raise click.ClickException(msg)
         if eff_type == "python":
             template_vars["venv_path"] = venv_path
@@ -140,7 +162,7 @@ def configure(  # noqa: C901
     try:
         unit_content = render_unit(eff_type, **template_vars)
     except Exception as exc:
-        msg = f"Template rendering failed: {exc}"
+        msg = click.style(f"Template rendering failed: {exc}", fg="red")
         raise click.ClickException(msg) from exc
 
     unit_dir = "$HOME/.config/systemd/user"
@@ -152,6 +174,6 @@ def configure(  # noqa: C901
         executor.run("systemctl --user daemon-reload")
         executor.run(f"systemctl --user enable --now {instance_name}")
     except ExecutorError as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
-    click.echo(f"Instance {instance_name!r} configured successfully.")
+    click.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
