@@ -151,7 +151,7 @@ def update(  # noqa: C901
         if eff_type == "odoo":
             addons_path = get_addons_path(executor, instance_path)
             executor.run(
-                f"{instance_path}/.venv/bin/click-odoo-update -d {eff_db} --addons-path={addons_path}",
+                f"click-odoo-update -d {eff_db} --addons-path={addons_path}",
                 cwd=instance_path,
             )
         executor.run(f"systemctl --user restart {instance_name}")
