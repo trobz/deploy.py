@@ -115,7 +115,7 @@ def update(  # noqa: C901
         )
         raise click.ClickException(msg) from None
 
-    click.secho("\nPulling latest code …", fg="green")
+    click.secho("\nPulling latest code…", fg="green")
     try:
         executor.run("git pull", cwd=instance_path)
     except ExecutorError as exc:
@@ -125,7 +125,7 @@ def update(  # noqa: C901
         raise click.ClickException(msg) from exc
 
     # Step 6: Update dependencies / rebuild
-    click.secho("\nUpdating dependencies …", fg="green")
+    click.secho("\nUpdating dependencies…", fg="green")
     try:
         if eff_type == "odoo":
             executor.run(
@@ -146,7 +146,7 @@ def update(  # noqa: C901
         raise click.ClickException(msg) from exc
 
     # Step 7: Apply changes
-    click.secho("\nApplying changes …", fg="green")
+    click.secho("\nApplying changes…", fg="green")
     try:
         if eff_type == "odoo":
             addons_path = get_addons_path(executor, instance_path)

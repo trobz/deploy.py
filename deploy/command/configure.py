@@ -94,7 +94,7 @@ def configure(  # noqa: C901
             raise click.ClickException(msg)
         click.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
     else:
-        click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name} …", fg="green")
+        click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
         try:
             executor.run(f"git clone {eff_repo_url} $HOME/{instance_name}")
         except ExecutorError as exc:
@@ -106,7 +106,7 @@ def configure(  # noqa: C901
     )
 
     # Step 3: Set up environment
-    click.secho(f"\nSetting up {eff_type} environment …", fg="green")
+    click.secho(f"\nSetting up {eff_type} environment…", fg="green")
     try:
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
@@ -129,7 +129,7 @@ def configure(  # noqa: C901
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
     # Step 4: Install systemd unit
-    click.secho("\nInstalling systemd unit …", fg="green")
+    click.secho("\nInstalling systemd unit…", fg="green")
     venv_path = f"{instance_path}/.venv"
 
     template_vars: dict[str, Any] = {
