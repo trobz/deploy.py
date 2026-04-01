@@ -1,6 +1,6 @@
 [project]
 name = "deploy"
-version = "0.3.0"
+version = "0.3.1"
 description = "CLI tool for deploying and managing applications on remote servers over SSH."
 authors = [{name = "hailangvn", email = "hailn@trobz.com"}]
 requires-python = ">=3.10"

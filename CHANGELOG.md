@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.1 (2026-04-01)
+
+### Bug Fixes
+
+- Remove extra space before ellipsis in log messages
+  ([`650d3f7`](https://github.com/trobz/deploy.py/commit/650d3f7cf04854bec3bd3eccd859abb103cac91b))
+
+
 ## v0.3.0 (2026-03-31)
 
 ### Bug Fixes
