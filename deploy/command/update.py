@@ -132,7 +132,7 @@ def update(  # noqa: C901
                 "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
                 cwd=instance_path,
             )
-            executor.run("odoo-venv update .venv --backup", cwd=instance_path)
+            executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
         elif eff_type == "python":
             setup_python_deps(executor, instance_path)
         else:  # service
