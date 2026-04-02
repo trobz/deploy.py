@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.3 (2026-04-02)
+
+### Bug Fixes
+
+- Activate venv for click-odoo-update
+  ([`fb1b775`](https://github.com/trobz/deploy.py/commit/fb1b7751a01a033d4d8cba70d0c0f4e67b3d6c62))
+
+
 ## v0.3.2 (2026-04-02)
 
 ### Bug Fixes
