@@ -26,7 +26,6 @@ On remote server where applications will be deployed:
 ```bash
 uv tool install odoo-venv
 uv tool install odoo-addons-path
-uv tool install click-odoo-contrib
 uv tool install git-aggregator
 ```
 
