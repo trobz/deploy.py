@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.2 (2026-04-02)
+
+### Bug Fixes
+
+- **update**: Always confirm when update venv
+  ([`1c25356`](https://github.com/trobz/deploy.py/commit/1c253565a620edaae1c42dcc2711a03bf0adb91c))
+
+
 ## v0.3.1 (2026-04-01)
 
 ### Bug Fixes
