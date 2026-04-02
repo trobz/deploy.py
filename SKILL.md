@@ -10,6 +10,7 @@ argument-hint: "[configure|update|status] [instance_name] [options]"
 Deploy and manage application instances on remote servers over SSH using the [`deploy`](https://github.com/trobz/deploy.py) CLI tool.
 
 Supports three deployment types:
+
 - **`odoo`** — Odoo projects (auto-detected from `odoo-` / `openerp-` prefix)
 - **`python`** — Generic Python services (FastAPI, Flask, workers, etc.)
 - **`service`** — Any non-Python application where build/start commands are operator-defined
@@ -44,7 +45,7 @@ uv tool install uv   # usually pre-installed
 
 ## Instance Name Convention
 
-```
+```bash
 <type_prefix>-<project_slug>-<environment>[-<suffix>]
 ```
 
@@ -55,7 +56,8 @@ uv tool install uv   # usually pre-installed
 | `suffix` | Optional: `-02`, `-eu`, `-vn` |
 
 **Examples:**
-```
+
+```bash
 odoo-myproject-production
 odoo-myproject-staging-02
 service-myapi-production-eu
@@ -122,11 +124,13 @@ deploy configure <instance_name> [ssh_host] [repo_url] [--type odoo|python|servi
 ```
 
 **Options:**
+
 - `--type` — Override auto-detected type
 - `--force` — Re-run setup even if the instance directory already exists
 - `-p` — SSH port (default: 22)
 
 **Examples:**
+
 ```bash
 # Odoo instance (type auto-detected from "odoo-" prefix)
 deploy configure odoo-myproject-staging deploy@server.example.com git@github.com:org/repo.git
@@ -142,6 +146,7 @@ deploy configure odoo-myproject-staging --force
 ```
 
 **What it does:**
+
 1. Connects via SSH (or runs locally if no `ssh_host`)
 2. Clones the repo into `~/<instance_name>` on the remote host
 3. Sets up the environment:
@@ -161,10 +166,12 @@ deploy [--config FILE] update <instance_name> [ssh_host] [-p PORT] [--type odoo|
 ```
 
 **Options:**
+
 - `--db` — (Odoo only) Override the target database name
 - `--ignore-hooks` — Skip all hook execution
 
 **Examples:**
+
 ```bash
 # With config file
 deploy update odoo-myproject-staging
@@ -190,6 +197,7 @@ deploy --config /path/to/deploy.yml update odoo-myproject-staging
 | `post-update-success` / `post-update-fail` | After update | No |
 
 **What it does (Odoo):**
+
 1. Runs pre-update hooks
 2. `git pull` in `~/<instance_name>`
 3. `odoo-venv update .venv --backup --yes`
@@ -206,7 +214,8 @@ deploy [--config FILE] status <instance_name> [ssh_host] [-p PORT]
 ```
 
 **Output:**
-```
+
+```bash
 Instance:  odoo-myproject-staging
 Remote:    git@github.com:org/repo.git
 Branch:    main (abc1234)
