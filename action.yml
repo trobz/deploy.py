@@ -1,0 +1,48 @@
+name: Deploy to remote server
+description: Deploy to remote server
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up SSH agent
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+    - name: Add remote host to known_hosts
+      run: |
+        ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT }} ${{ secrets.DEPLOY_SSH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Generate deploy.yml
+      run: |
+        cat > deploy.yml <<EOF
+        ${{ secrets.DEPLOY_INSTANCE }}:
+          ssh_host: ${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}
+          ssh_port: ${{ secrets.DEPLOY_SSH_PORT }}
+          repo_url: git@github.com:${{ github.repository }}.git
+        EOF
+
+    - name: Append db to deploy.yml if exist
+      env:
+        deploy_db: ${{ secrets.DEPLOY_DB }}
+      if: ${{ env.deploy_db != '' }}
+      run: |
+        echo "  db: ${{ env.deploy_db }}" >> deploy.yml
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install deploy
+      run: uv tool install "git+https://github.com/trobz/deploy.py.git"
+
+    - name: Deploy
+      run: |
+        deploy --config deploy.yml --verbose update ${{ secrets.DEPLOY_INSTANCE }}
+
+branding:
+  icon: "box"
+  color: "orange"
