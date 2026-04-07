@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-04-07)
+
+### Features
+
+- Add /action.yml to repo
+  ([`6eebbc9`](https://github.com/trobz/deploy.py/commit/6eebbc9eded9f2594a58776248d35b9599a15a3c))
+
+
 ## v0.3.3 (2026-04-02)
 
 ### Bug Fixes
