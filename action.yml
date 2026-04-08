@@ -26,6 +26,27 @@ runs:
           repo_url: git@github.com:${{ github.repository }}.git
         EOF
 
+    - name: Have type of deploy if specified
+      env:
+        deploy_type: ${{ vars.DEPLOY_TYPE }}
+      if: ${{ env.deploy_type != '' }}
+      run: |
+        echo "  type: ${{ env.deploy_type }}" >> deploy.yml
+
+    - name: Append build_cmd to deploy.yml if exist
+      env:
+        deploy_build_cmd: ${{ vars.DEPLOY_BUILD_CMD }}
+      if: ${{ env.deploy_build_cmd != '' }}
+      run: |
+        echo "  build_cmd: ${{ env.deploy_build_cmd }}" >> deploy.yml
+
+    - name: Append exec_start to deploy.yml if exist
+      env:
+        deploy_exec_start: ${{ vars.DEPLOY_EXEC_START }}
+      if: ${{ env.deploy_exec_start != '' }}
+      run: |
+        echo "  exec_start: ${{ env.deploy_exec_start }}" >> deploy.yml
+
     - name: Append db to deploy.yml if exist
       env:
         deploy_db: ${{ secrets.DEPLOY_DB }}
