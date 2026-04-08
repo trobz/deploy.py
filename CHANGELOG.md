@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.2 (2026-04-08)
+
+### Bug Fixes
+
+- **action.yml**: Intercept type, build_cmd, and exec_start settings
+  ([`66f99d2`](https://github.com/trobz/deploy.py/commit/66f99d2fd35c5c531d600e2622baf18ffe1b4983))
+
+
 ## v0.4.1 (2026-04-08)
 
 ### Bug Fixes
