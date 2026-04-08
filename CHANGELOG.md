@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.1 (2026-04-08)
+
+### Bug Fixes
+
+- **update**: Install and use click-odoo-update in venv
+  ([`c36027e`](https://github.com/trobz/deploy.py/commit/c36027e8bca08dfb35fd5d14d6b90f56b9548650))
+
+
 ## v0.4.0 (2026-04-07)
 
 ### Features
