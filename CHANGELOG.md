@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.4 (2026-04-10)
+
+### Bug Fixes
+
+- **template**: Wrap start command in bash -c ""
+  ([`3562052`](https://github.com/trobz/deploy.py/commit/3562052171c4a7450bdb5fdac8c79014b7247a84))
+
+
 ## v0.4.3 (2026-04-10)
 
 ### Bug Fixes
