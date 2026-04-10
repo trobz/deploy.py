@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.3 (2026-04-10)
+
+### Bug Fixes
+
+- **action.yml**: Change secrets and vars to inputs
+  ([`1f8c330`](https://github.com/trobz/deploy.py/commit/1f8c330d221a5e094797507b6ca08a34a4ac57b2))
+
+
 ## v0.4.2 (2026-04-08)
 
 ### Bug Fixes
