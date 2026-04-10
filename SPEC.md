@@ -395,9 +395,9 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 WorkingDirectory={{ instance_path }}
-ExecStart={{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
+ExecStart=bash -c "{{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
     --config {{ instance_path }}/config/odoo.conf \
-    --addons-path $({{ odoo_addons_path }} {{ instance_path }})
+    --addons-path $({{ odoo_addons_path }} {{ instance_path }})"
 Restart=on-failure
 RestartSec=5s
 
