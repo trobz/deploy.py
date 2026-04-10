@@ -75,6 +75,7 @@ def resolve_options(
     repo_url: str | None = None,
     deploy_type: str | None = None,
     db: str | None = None,
+    repo_subdir: str | None = None,
     require_type: bool = True,
 ) -> dict[str, Any]:
     """Merge CLI args over config values over built-in defaults.
@@ -93,6 +94,8 @@ def resolve_options(
         resolved["type"] = deploy_type
     if db is not None:
         resolved["db"] = db
+    if repo_subdir is not None:
+        resolved["repo_subdir"] = repo_subdir
 
     # Auto-detect type from instance name prefix when not explicitly set
     if require_type and "type" not in resolved:
