@@ -44,6 +44,12 @@ def _is_git_repo(executor: Executor, path: str) -> bool:
     default=False,
     help="Re-run setup steps even if the instance directory already exists.",
 )
+@click.option(
+    "--repo-subdir",
+    "repo_subdir",
+    default=None,
+    help="Subdirectory within the repo to use as the service root (for monorepos).",
+)
 @click.pass_context
 def configure(  # noqa: C901
     ctx: click.Context,
@@ -53,6 +59,7 @@ def configure(  # noqa: C901
     deploy_type: str | None,
     ssh_port: int | None,
     force: bool,
+    repo_subdir: str | None,
 ) -> None:
     """Configure a new deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -64,6 +71,7 @@ def configure(  # noqa: C901
             ssh_port=ssh_port,
             repo_url=repo_url,
             deploy_type=deploy_type,
+            repo_subdir=repo_subdir,
         )
     except ValueError as exc:
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
@@ -83,6 +91,8 @@ def configure(  # noqa: C901
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
+    eff_repo_subdir: str | None = opts.get("repo_subdir")
+    service_path = f"{instance_path}/{eff_repo_subdir}" if eff_repo_subdir else instance_path
 
     # Step 2: Clone repository
     if _is_git_repo(executor, instance_path):
@@ -100,10 +110,12 @@ def configure(  # noqa: C901
         except ExecutorError as exc:
             msg = click.style(f"Git clone failed: {exc}", fg="red")
             raise click.ClickException(msg) from exc
-    executor.run(
-        "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
-        cwd=instance_path,
-    )
+
+    if eff_type == "odoo":
+        executor.run(
+            "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
+            cwd=instance_path,
+        )
 
     # Step 3: Set up environment
     click.secho(f"\nSetting up {eff_type} environment…", fg="green")
@@ -111,10 +123,10 @@ def configure(  # noqa: C901
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
         elif eff_type == "python":
-            setup_python_venv(executor, instance_path, force=force)
+            setup_python_venv(executor, service_path, force=force)
             executor.run(
                 "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
-                cwd=instance_path,
+                cwd=service_path,
             )
         else:  # service
             build_cmd: str | None = opts.get("build")
@@ -124,17 +136,17 @@ def configure(  # noqa: C901
                     fg="red",
                 )
                 raise click.ClickException(msg)
-            executor.run(build_cmd, cwd=instance_path)
+            executor.run(build_cmd, cwd=service_path)
     except ExecutorError as exc:
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
     # Step 4: Install systemd unit
     click.secho("\nInstalling systemd unit…", fg="green")
-    venv_path = f"{instance_path}/.venv"
+    venv_path = f"{service_path}/.venv"
 
     template_vars: dict[str, Any] = {
         "instance_name": instance_name,
-        "instance_path": instance_path,
+        "instance_path": service_path,
     }
     if eff_type == "odoo":
         template_vars["venv_path"] = venv_path
@@ -145,7 +157,7 @@ def configure(  # noqa: C901
         if not exec_start:
             res = executor.capture(
                 "if [ -f server.py ]; then echo server.py; fi",
-                cwd=instance_path,
+                cwd=service_path,
             )
             if res == "server.py":
                 exec_start = "python server.py"

@@ -38,6 +38,12 @@ from deploy.utils.venv import setup_python_deps
     default=False,
     help="Skip all hook execution.",
 )
+@click.option(
+    "--repo-subdir",
+    "repo_subdir",
+    default=None,
+    help="Subdirectory within the repo to use as the service root (for monorepos).",
+)
 @click.pass_context
 def update(  # noqa: C901
     ctx: click.Context,
@@ -47,6 +53,7 @@ def update(  # noqa: C901
     db: str | None,
     ssh_port: int | None,
     ignore_hooks: bool,
+    repo_subdir: str | None,
 ) -> None:
     """Update an existing deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -58,6 +65,7 @@ def update(  # noqa: C901
             ssh_port=ssh_port,
             deploy_type=deploy_type,
             db=db,
+            repo_subdir=repo_subdir,
         )
     except ValueError as exc:
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
@@ -71,6 +79,8 @@ def update(  # noqa: C901
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
+    eff_repo_subdir: str | None = opts.get("repo_subdir")
+    service_path = f"{instance_path}/{eff_repo_subdir}" if eff_repo_subdir else instance_path
 
     def run_hooks(hook_name: str) -> bool:
         """Execute all commands for *hook_name*. Returns True if all succeeded."""
@@ -134,11 +144,11 @@ def update(  # noqa: C901
             )
             executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
         elif eff_type == "python":
-            setup_python_deps(executor, instance_path)
+            setup_python_deps(executor, service_path)
         else:  # service
             build_cmd: str | None = opts.get("build")
             if build_cmd:
-                executor.run(build_cmd, cwd=instance_path)
+                executor.run(build_cmd, cwd=service_path)
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
