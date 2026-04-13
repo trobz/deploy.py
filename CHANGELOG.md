@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-04-13)
+
+### Bug Fixes
+
+- **configure**: Move git aggregate command under eff_type odoo
+  ([`f0ce239`](https://github.com/trobz/deploy.py/commit/f0ce2394ded70b3c55418c20d7f52885402f4ae9))
+
+### Features
+
+- **configure**: Add repo_subdir support for monorepo deployments
+  ([`1cadb31`](https://github.com/trobz/deploy.py/commit/1cadb31956e4a1a0748c08b8819ad98aa0f863ce))
+
+- **update**: Add repo_subdir support for monorepo deployments
+  ([`5704f30`](https://github.com/trobz/deploy.py/commit/5704f300f859c8a353f3ddb2e30bd03b4cd5695b))
+
+
 ## v0.4.4 (2026-04-10)
 
 ### Bug Fixes
