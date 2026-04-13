@@ -110,10 +110,12 @@ def configure(  # noqa: C901
         except ExecutorError as exc:
             msg = click.style(f"Git clone failed: {exc}", fg="red")
             raise click.ClickException(msg) from exc
-    executor.run(
-        "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
-        cwd=instance_path,
-    )
+
+    if eff_type == "odoo":
+        executor.run(
+            "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
+            cwd=instance_path,
+        )
 
     # Step 3: Set up environment
     click.secho(f"\nSetting up {eff_type} environment…", fg="green")
