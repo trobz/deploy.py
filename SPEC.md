@@ -89,7 +89,7 @@ file values, which take precedence over built-in defaults.
 **Signature**
 
 ```bash
-deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service] [-p <ssh_port>]
+deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service] [-p <ssh_port>] [--force] [--repo-subdir <subdir>]
 ```
 
 **Arguments**
@@ -98,7 +98,6 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Logical name for the instance (used for paths and service name)             |
 | `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
-| `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 | `repo_url`      | If not in config       | Git repository URL (e.g. `git@github.com:org/repo.git`)                     |
 
 **Options**
@@ -106,7 +105,9 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 | Option         | Default  | Description                                                                                         |
 |----------------|----------|-----------------------------------------------------------------------------------------------------|
 | `--type`       | auto     | Deployment type: `odoo`, `python`, or `service`; auto-detected from instance name prefix if omitted |
+| `-p`           | `22`     | SSH port, default 22                                                                                |
 | `--force`      | `False`  | Re-run steps 3–4 even if the instance directory already exists                                      |
+| `--repo-subdir`| `None`   | Subdirectory within the repository to work on, if any                                               |
 
 **Steps (executed in order)**
 
@@ -170,7 +171,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 **Signature**
 
 ```bash
-deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--type odoo|python|service] [--db DATABASE]
+deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--type odoo|python|service] [--db DATABASE] [--ignore-hooks] [--repo-subdir <subdir>]
 ```
 
 **Arguments**
@@ -179,15 +180,16 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--ty
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Name of the previously configured instance                                  |
 | `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
-| `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 
 **Options**
 
 | Option             | Default           | Description                                              |
 |--------------------|-------------------|----------------------------------------------------------|
 | `--type`           | auto              | Deployment type: `odoo`, `python`, or `service`; auto-detected from instance name prefix if omitted |
+| `-p`               | `22`              | SSH port, default 22                                     |
 | `--db`             | `<instance_name>` | (Odoo only) Override the target database name            |
 | `--ignore-hooks`   | `False`           | Skip all hook execution                                  |
+| `--repo-subdir`    | `None`            | Subdirectory within the repository to work on, if any    |
 
 **Hooks**
 
