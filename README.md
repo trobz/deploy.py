@@ -11,14 +11,10 @@ It supports multiple deployment types:
 
 ## Installation
 
-```bash
-pip install deploy
-```
-
 With [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv tool install deploy
+uv tool install https://github.com/trobz/deploy.py.git
 ```
 
 On remote server where applications will be deployed:
