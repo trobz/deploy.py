@@ -1,0 +1,5 @@
+---
+template: landing.html
+---
+
+# Home

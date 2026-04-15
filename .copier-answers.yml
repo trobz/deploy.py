@@ -1,8 +1,9 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.2.0
+_commit: v1.3.0
 _src_path: https://github.com/trobz/trobz-python-template.git
 author_email: hailn@trobz.com
 author_username: hailangvn
+enable_docs_site: true
 enable_github_action: true
 package_name: trobz_deploy
 project_description: CLI tool for deploying and managing applications on remote servers
