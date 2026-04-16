@@ -5,7 +5,7 @@ import click
 from deploy.utils.addons import get_addons_path
 from deploy.utils.config import load_config, resolve_options
 from deploy.utils.executor import Executor, ExecutorError
-from deploy.utils.venv import setup_python_deps
+from deploy.utils.venv import setup_python_deps, upgrade_package
 
 
 @click.command()
@@ -74,6 +74,8 @@ def update(  # noqa: C901
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_type: str = opts["type"]
     eff_db: str = opts.get("db", instance_name)
+    _req = opts.get("requirements")
+    eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
     hooks: dict = opts.get("hooks", {})
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
@@ -115,45 +117,56 @@ def update(  # noqa: C901
     # Step 4: pre-update-success
     run_hooks("pre-update-success")
 
-    # Step 5: git pull
-    try:
-        executor.run(f"test -d {instance_path}/.git")
-    except ExecutorError:
-        msg = click.style(
-            f"Instance directory not found or not a git repo: ~/{instance_name}",
-            fg="red",
-        )
-        raise click.ClickException(msg) from None
-
-    click.secho("\nPulling latest code…", fg="green")
-    try:
-        executor.run("git pull", cwd=instance_path)
-    except ExecutorError as exc:
-        run_hooks("post-update")
-        run_hooks("post-update-fail")
-        msg = click.style(f"git pull failed: {exc}", fg="red")
-        raise click.ClickException(msg) from exc
-
-    # Step 6: Update dependencies / rebuild
-    click.secho("\nUpdating dependencies…", fg="green")
-    try:
-        if eff_type == "odoo":
-            executor.run(
-                "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
-                cwd=instance_path,
+    # Step 5+6: Pull/upgrade code and update dependencies
+    if eff_type == "python" and eff_requirements:
+        # Package mode: upgrade pip package directly, no git pull
+        click.secho("\nUpgrading package…", fg="green")
+        try:
+            upgrade_package(executor, instance_path, eff_requirements)
+        except ExecutorError as exc:
+            run_hooks("post-update")
+            run_hooks("post-update-fail")
+            msg = click.style(f"Package upgrade failed: {exc}", fg="red")
+            raise click.ClickException(msg) from exc
+    else:
+        # Repo mode: git pull then update deps
+        try:
+            executor.run(f"test -d {instance_path}/.git")
+        except ExecutorError:
+            msg = click.style(
+                f"Instance directory not found or not a git repo: ~/{instance_name}",
+                fg="red",
             )
-            executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
-        elif eff_type == "python":
-            setup_python_deps(executor, service_path)
-        else:  # service
-            build_cmd: str | None = opts.get("build")
-            if build_cmd:
-                executor.run(build_cmd, cwd=service_path)
-    except ExecutorError as exc:
-        run_hooks("post-update")
-        run_hooks("post-update-fail")
-        msg = click.style(f"Dependency update failed: {exc}", fg="red")
-        raise click.ClickException(msg) from exc
+            raise click.ClickException(msg) from None
+
+        click.secho("\nPulling latest code…", fg="green")
+        try:
+            executor.run("git pull", cwd=instance_path)
+        except ExecutorError as exc:
+            run_hooks("post-update")
+            run_hooks("post-update-fail")
+            msg = click.style(f"git pull failed: {exc}", fg="red")
+            raise click.ClickException(msg) from exc
+
+        click.secho("\nUpdating dependencies…", fg="green")
+        try:
+            if eff_type == "odoo":
+                executor.run(
+                    "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
+                    cwd=instance_path,
+                )
+                executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
+            elif eff_type == "python":
+                setup_python_deps(executor, service_path)
+            else:  # service
+                build_cmd: str | None = opts.get("build")
+                if build_cmd:
+                    executor.run(build_cmd, cwd=service_path)
+        except ExecutorError as exc:
+            run_hooks("post-update")
+            run_hooks("post-update-fail")
+            msg = click.style(f"Dependency update failed: {exc}", fg="red")
+            raise click.ClickException(msg) from exc
 
     # Step 7: Apply changes
     click.secho("\nApplying changes…", fg="green")

@@ -7,7 +7,7 @@ import click
 from deploy.utils.config import load_config, resolve_options
 from deploy.utils.executor import Executor, ExecutorError
 from deploy.utils.render import render_unit
-from deploy.utils.venv import setup_odoo_venv, setup_python_venv
+from deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
 
 
 def _is_git_repo(executor: Executor, path: str) -> bool:
@@ -80,10 +80,12 @@ def configure(  # noqa: C901
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_repo_url: str | None = opts.get("repo_url")
     eff_type: str = opts["type"]
+    _req = opts.get("requirements")
+    eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
 
-    if not eff_repo_url:
+    if eff_type == "python" and eff_requirements and eff_repo_url:
         msg = click.style(
-            "repo_url is required. Provide it as an argument or set it in deploy.yml.",
+            "requirements and repo_url are mutually exclusive for python type.",
             fg="red",
         )
         raise click.ClickException(msg)
@@ -94,22 +96,46 @@ def configure(  # noqa: C901
     eff_repo_subdir: str | None = opts.get("repo_subdir")
     service_path = f"{instance_path}/{eff_repo_subdir}" if eff_repo_subdir else instance_path
 
-    # Step 2: Clone repository
-    if _is_git_repo(executor, instance_path):
-        if not force:
+    # Step 2: Set up instance directory
+    if eff_type == "python" and eff_requirements:
+        # Package mode: create directory directly, no git clone
+        try:
+            executor.run(f"test -d {instance_path}")
+            if not force:
+                msg = click.style(
+                    f"Instance directory already exists: ~/{instance_name}\nUse --force to re-run setup.",
+                    fg="yellow",
+                )
+                raise click.ClickException(msg)
+            click.secho("\nDirectory exists, skipping mkdir (--force).", fg="yellow")
+        except ExecutorError:
+            click.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
+            executor.run(f"mkdir -p {instance_path}")
+    else:
+        if not eff_repo_url:
             msg = click.style(
-                f"Instance directory already exists: ~/{instance_name}\nUse --force to skip cloning and re-run setup.",
-                fg="yellow",
+                "repo_url is required. Provide it as an argument or set it in deploy.yml.",
+                fg="red",
             )
             raise click.ClickException(msg)
-        click.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
-    else:
-        click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
-        try:
-            executor.run(f"git clone {eff_repo_url} $HOME/{instance_name}")
-        except ExecutorError as exc:
-            msg = click.style(f"Git clone failed: {exc}", fg="red")
-            raise click.ClickException(msg) from exc
+
+        # Repo mode: clone
+        if _is_git_repo(executor, instance_path):
+            if not force:
+                msg = click.style(
+                    f"Instance directory already exists: ~/{instance_name}\n"
+                    "Use --force to skip cloning and re-run setup.",
+                    fg="yellow",
+                )
+                raise click.ClickException(msg)
+            click.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
+        else:
+            click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
+            try:
+                executor.run(f"git clone {eff_repo_url} $HOME/{instance_name}")
+            except ExecutorError as exc:
+                msg = click.style(f"Git clone failed: {exc}", fg="red")
+                raise click.ClickException(msg) from exc
 
     if eff_type == "odoo":
         executor.run(
@@ -123,11 +149,14 @@ def configure(  # noqa: C901
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
         elif eff_type == "python":
-            setup_python_venv(executor, service_path, force=force)
-            executor.run(
-                "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
-                cwd=service_path,
-            )
+            if eff_requirements:
+                setup_package_venv(executor, instance_path, eff_requirements, force=force)
+            else:
+                setup_python_venv(executor, service_path, force=force)
+                executor.run(
+                    "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
+                    cwd=service_path,
+                )
         else:  # service
             build_cmd: str | None = opts.get("build")
             if not build_cmd:
@@ -142,11 +171,12 @@ def configure(  # noqa: C901
 
     # Step 4: Install systemd unit
     click.secho("\nInstalling systemd unit…", fg="green")
-    venv_path = f"{service_path}/.venv"
+    unit_instance_path = instance_path if eff_requirements else service_path
+    venv_path = f"{unit_instance_path}/.venv"
 
     template_vars: dict[str, Any] = {
         "instance_name": instance_name,
-        "instance_path": service_path,
+        "instance_path": unit_instance_path,
     }
     if eff_type == "odoo":
         template_vars["venv_path"] = venv_path
@@ -154,7 +184,7 @@ def configure(  # noqa: C901
         template_vars["odoo_addons_path"] = odoo_addons_path
     else:
         exec_start: str = opts.get("exec_start", "")
-        if not exec_start:
+        if not exec_start and not eff_requirements:
             res = executor.capture(
                 "if [ -f server.py ]; then echo server.py; fi",
                 cwd=service_path,
