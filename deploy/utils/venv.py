@@ -23,13 +23,13 @@ def setup_python_deps(executor: Executor, instance_path: str) -> None:
     executor.run("if [ -e pyproject.toml ]; then uv sync; fi", cwd=instance_path)
 
 
-def setup_package_venv(executor: Executor, instance_path: str, requirement: str, force: bool = False) -> None:
-    """Create a venv with ``uv`` and install a pip package directly."""
+def setup_package_venv(executor: Executor, instance_path: str, requirements: list[str], force: bool = False) -> None:
+    """Create a venv with ``uv`` and install pip packages directly."""
     clear_flag = " --clear" if force else ""
     executor.run(f"uv venv{clear_flag} .venv", cwd=instance_path)
-    executor.run(f"uv pip install {requirement}", cwd=instance_path)
+    executor.run(f"uv pip install {' '.join(requirements)}", cwd=instance_path)
 
 
-def upgrade_package(executor: Executor, instance_path: str, requirement: str) -> None:
-    """Upgrade a pip package in an existing venv."""
-    executor.run(f"uv pip install --upgrade {requirement}", cwd=instance_path)
+def upgrade_package(executor: Executor, instance_path: str, requirements: list[str]) -> None:
+    """Upgrade pip packages in an existing venv."""
+    executor.run(f"uv pip install --upgrade {' '.join(requirements)}", cwd=instance_path)

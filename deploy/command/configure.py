@@ -80,11 +80,12 @@ def configure(  # noqa: C901
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_repo_url: str | None = opts.get("repo_url")
     eff_type: str = opts["type"]
-    eff_requirement: str | None = opts.get("requirement")
+    _req = opts.get("requirements")
+    eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
 
-    if eff_type == "python" and eff_requirement and eff_repo_url:
+    if eff_type == "python" and eff_requirements and eff_repo_url:
         msg = click.style(
-            "requirement and repo_url are mutually exclusive for python type.",
+            "requirements and repo_url are mutually exclusive for python type.",
             fg="red",
         )
         raise click.ClickException(msg)
@@ -96,7 +97,7 @@ def configure(  # noqa: C901
     service_path = f"{instance_path}/{eff_repo_subdir}" if eff_repo_subdir else instance_path
 
     # Step 2: Set up instance directory
-    if eff_type == "python" and eff_requirement:
+    if eff_type == "python" and eff_requirements:
         # Package mode: create directory directly, no git clone
         try:
             executor.run(f"test -d {instance_path}")
@@ -148,8 +149,8 @@ def configure(  # noqa: C901
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path)
         elif eff_type == "python":
-            if eff_requirement:
-                setup_package_venv(executor, instance_path, eff_requirement, force=force)
+            if eff_requirements:
+                setup_package_venv(executor, instance_path, eff_requirements, force=force)
             else:
                 setup_python_venv(executor, service_path, force=force)
                 executor.run(
@@ -170,7 +171,7 @@ def configure(  # noqa: C901
 
     # Step 4: Install systemd unit
     click.secho("\nInstalling systemd unit…", fg="green")
-    unit_instance_path = instance_path if eff_requirement else service_path
+    unit_instance_path = instance_path if eff_requirements else service_path
     venv_path = f"{unit_instance_path}/.venv"
 
     template_vars: dict[str, Any] = {
@@ -183,7 +184,7 @@ def configure(  # noqa: C901
         template_vars["odoo_addons_path"] = odoo_addons_path
     else:
         exec_start: str = opts.get("exec_start", "")
-        if not exec_start and not eff_requirement:
+        if not exec_start and not eff_requirements:
             res = executor.capture(
                 "if [ -f server.py ]; then echo server.py; fi",
                 cwd=service_path,

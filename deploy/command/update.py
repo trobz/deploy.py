@@ -74,7 +74,8 @@ def update(  # noqa: C901
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_type: str = opts["type"]
     eff_db: str = opts.get("db", instance_name)
-    eff_requirement: str | None = opts.get("requirement")
+    _req = opts.get("requirements")
+    eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
     hooks: dict = opts.get("hooks", {})
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
@@ -117,11 +118,11 @@ def update(  # noqa: C901
     run_hooks("pre-update-success")
 
     # Step 5+6: Pull/upgrade code and update dependencies
-    if eff_type == "python" and eff_requirement:
+    if eff_type == "python" and eff_requirements:
         # Package mode: upgrade pip package directly, no git pull
         click.secho("\nUpgrading package…", fg="green")
         try:
-            upgrade_package(executor, instance_path, eff_requirement)
+            upgrade_package(executor, instance_path, eff_requirements)
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
