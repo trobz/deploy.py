@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-04-16)
+
+### Features
+
+- **configure,update**: Rename requirement to requirements, support list
+  ([`2b42e20`](https://github.com/trobz/deploy.py/commit/2b42e20d94e94327a0cf530c1c01bc00bf71605e))
+
+- **configure,update**: Support pip package deployment for python type
+  ([`1596195`](https://github.com/trobz/deploy.py/commit/1596195bc5e3d130b0e2743a659399e36b186596))
+
+- **templates**: Load .env file in python systemd unit if present
+  ([`7bf3346`](https://github.com/trobz/deploy.py/commit/7bf3346189b588ef6c629a5be0a19f0cfb4db79f))
+
+
 ## v0.5.0 (2026-04-13)
 
 ### Bug Fixes
