@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={{ instance_path }}
+EnvironmentFile=-{{ instance_path }}/.env
 ExecStart={{ venv_path }}/bin/{{ exec_start }}
 Restart=on-failure
 RestartSec=5s
