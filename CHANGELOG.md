@@ -2,6 +2,16 @@
 
 <!-- version list -->
 
+## v0.6.1 (2026-04-24)
+
+### Bug Fixes
+
+- **ci-workflow**: update actions for node 24
+  ([`32875ee`](https://github.com/trobz/deploy.py/commit/32875ee24c4eb82241fe0b96a4426b690a1f1eee))
+
+- **ci-workflow**: update actions for node 24
+  ([`0979da0`](https://github.com/trobz/deploy.py/commit/0979da01f315e65f5ed65519d479ac552ba20168))
+
 ## v0.6.0 (2026-04-16)
 
 ### Features
