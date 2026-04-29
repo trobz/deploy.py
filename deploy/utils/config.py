@@ -73,6 +73,7 @@ def resolve_options(
     ssh_host: str | None = None,
     ssh_port: int | None = None,
     repo_url: str | None = None,
+    repo_branch: str | None = None,
     deploy_type: str | None = None,
     db: str | None = None,
     repo_subdir: str | None = None,
@@ -90,6 +91,8 @@ def resolve_options(
         resolved["ssh_port"] = ssh_port
     if repo_url is not None:
         resolved["repo_url"] = repo_url
+    if repo_branch is not None:
+        resolved["repo_branch"] = repo_branch
     if deploy_type is not None:
         resolved["type"] = deploy_type
     if db is not None:
