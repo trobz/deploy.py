@@ -108,6 +108,19 @@ class Executor:
 
         return result.stdout.strip()
 
+    def stream(self, command: str, cwd: str | None = None) -> None:
+        """Run a long-lived streaming command (e.g. journalctl -f).
+
+        Output goes directly to the terminal. Returns when the process exits
+        or is interrupted (Ctrl+C).
+        """
+        argv = self._build_argv(command, cwd)
+        is_remote = isinstance(argv, list)
+        if self.verbose:
+            display = argv[-1] if is_remote else command
+            click.echo(f"$ {display}", err=True)
+        subprocess.run(argv, shell=not is_remote, cwd=cwd if not is_remote else None)  # noqa: S603
+
     def write_file(self, content: str, remote_path: str) -> None:
         """Write *content* to *remote_path* on the target host.
 
