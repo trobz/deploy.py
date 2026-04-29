@@ -44,6 +44,13 @@ from deploy.utils.venv import setup_python_deps, upgrade_package
     default=None,
     help="Subdirectory within the repo to use as the service root (for monorepos).",
 )
+@click.option(
+    "--watch",
+    "watch",
+    is_flag=True,
+    default=False,
+    help="Stream service logs with journalctl after a successful update.",
+)
 @click.pass_context
 def update(  # noqa: C901
     ctx: click.Context,
@@ -54,6 +61,7 @@ def update(  # noqa: C901
     ssh_port: int | None,
     ignore_hooks: bool,
     repo_subdir: str | None,
+    watch: bool,
 ) -> None:
     """Update an existing deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -189,3 +197,10 @@ def update(  # noqa: C901
     run_hooks("post-update-success")
 
     click.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
+
+    if watch:
+        click.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+        try:
+            executor.stream(f"journalctl --user -u {instance_name} -f")
+        except KeyboardInterrupt:
+            click.echo()
