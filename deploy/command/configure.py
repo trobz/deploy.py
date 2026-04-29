@@ -50,6 +50,12 @@ def _is_git_repo(executor: Executor, path: str) -> bool:
     default=None,
     help="Subdirectory within the repo to use as the service root (for monorepos).",
 )
+@click.option(
+    "--repo-branch",
+    "repo_branch",
+    default=None,
+    help="Git branch to clone and track (defaults to the repository's default branch).",
+)
 @click.pass_context
 def configure(  # noqa: C901
     ctx: click.Context,
@@ -60,6 +66,7 @@ def configure(  # noqa: C901
     ssh_port: int | None,
     force: bool,
     repo_subdir: str | None,
+    repo_branch: str | None,
 ) -> None:
     """Configure a new deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -70,6 +77,7 @@ def configure(  # noqa: C901
             ssh_host=ssh_host,
             ssh_port=ssh_port,
             repo_url=repo_url,
+            repo_branch=repo_branch,
             deploy_type=deploy_type,
             repo_subdir=repo_subdir,
         )
@@ -79,6 +87,7 @@ def configure(  # noqa: C901
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_repo_url: str | None = opts.get("repo_url")
+    eff_repo_branch: str | None = opts.get("repo_branch")
     eff_type: str = opts["type"]
     _req = opts.get("requirements")
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
@@ -132,7 +141,10 @@ def configure(  # noqa: C901
         else:
             click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
             try:
-                executor.run(f"git clone {eff_repo_url} $HOME/{instance_name}")
+                clone_cmd = f"git clone {eff_repo_url} $HOME/{instance_name}"
+                if eff_repo_branch:
+                    clone_cmd += f" --branch {eff_repo_branch}"
+                executor.run(clone_cmd)
             except ExecutorError as exc:
                 msg = click.style(f"Git clone failed: {exc}", fg="red")
                 raise click.ClickException(msg) from exc

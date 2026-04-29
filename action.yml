@@ -33,6 +33,10 @@ inputs:
     description: Database name
     required: false
     default: ""
+  deploy_repo_branch:
+    description: Git branch to deploy (defaults to the repository's default branch)
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -84,6 +88,12 @@ runs:
       shell: bash
       run: |
         echo "  db: ${{ inputs.deploy_db }}" >> deploy.yml
+
+    - name: Append repo_branch to deploy.yml if exist
+      if: ${{ inputs.deploy_repo_branch != '' }}
+      shell: bash
+      run: |
+        echo "  repo_branch: ${{ inputs.deploy_repo_branch }}" >> deploy.yml
 
     - name: Install uv
       uses: astral-sh/setup-uv@v5
