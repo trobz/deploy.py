@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-05-05)
+
+### Features
+
+- Add repo_branch parameter support
+  ([`94ea20b`](https://github.com/trobz/deploy.py/commit/94ea20ba1ba607b86440e9eedb610261408c218c))
+
+
 ## v0.6.1 (2026-04-24)
 
 ### Bug Fixes
