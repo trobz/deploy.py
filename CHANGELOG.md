@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.8.0 (2026-05-05)
+
+### Features
+
+- Add --watch flag to deploy update
+  ([`ece738f`](https://github.com/trobz/deploy.py/commit/ece738f465e97c4cff39b52512ddfd77f2f654db))
+
+
 ## v0.7.0 (2026-05-05)
 
 ### Features
