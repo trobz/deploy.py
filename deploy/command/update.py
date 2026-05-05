@@ -44,6 +44,12 @@ from deploy.utils.venv import setup_python_deps, upgrade_package
     default=None,
     help="Subdirectory within the repo to use as the service root (for monorepos).",
 )
+@click.option(
+    "--repo-branch",
+    "repo_branch",
+    default=None,
+    help="Git branch to pull (defaults to the currently checked-out branch).",
+)
 @click.pass_context
 def update(  # noqa: C901
     ctx: click.Context,
@@ -54,6 +60,7 @@ def update(  # noqa: C901
     ssh_port: int | None,
     ignore_hooks: bool,
     repo_subdir: str | None,
+    repo_branch: str | None,
 ) -> None:
     """Update an existing deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -66,6 +73,7 @@ def update(  # noqa: C901
             deploy_type=deploy_type,
             db=db,
             repo_subdir=repo_subdir,
+            repo_branch=repo_branch,
         )
     except ValueError as exc:
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
@@ -74,6 +82,7 @@ def update(  # noqa: C901
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_type: str = opts["type"]
     eff_db: str = opts.get("db", instance_name)
+    eff_repo_branch: str | None = opts.get("repo_branch")
     _req = opts.get("requirements")
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
     hooks: dict = opts.get("hooks", {})
@@ -141,7 +150,13 @@ def update(  # noqa: C901
 
         click.secho("\nPulling latest code…", fg="green")
         try:
-            executor.run("git pull", cwd=instance_path)
+            if eff_repo_branch:
+                executor.run(
+                    f"git fetch origin && git checkout {eff_repo_branch} && git pull",
+                    cwd=instance_path,
+                )
+            else:
+                executor.run("git pull", cwd=instance_path)
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
