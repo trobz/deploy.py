@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import click
 
-from deploy.utils.addons import get_addons_path
-from deploy.utils.config import load_config, resolve_options
-from deploy.utils.executor import Executor, ExecutorError
-from deploy.utils.venv import setup_python_deps, upgrade_package
+from trobz_deploy.utils.addons import get_addons_path
+from trobz_deploy.utils.config import load_config, resolve_options
+from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.venv import setup_python_deps, upgrade_package
 
 
 @click.command()

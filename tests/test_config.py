@@ -1,6 +1,6 @@
 import pytest
 
-from deploy.utils.config import parse_instance_name
+from trobz_deploy.utils.config import parse_instance_name
 
 # ---------------------------------------------------------------------------
 # Valid names from the SPEC examples
