@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.9.0 (2026-05-08)
+
+### Features
+
+- Publish trobz-deploy to pypi
+  ([`0fca46c`](https://github.com/trobz/deploy.py/commit/0fca46c542271b8a76e9b4fcac68ed5d506bb1f6))
+
+- Rename folder to prepare for publishing to pypi
+  ([`2541f57`](https://github.com/trobz/deploy.py/commit/2541f57012a8e72302630135db8148fad9ecbd34))
+
+
 ## v0.8.0 (2026-05-05)
 
 ### Features
