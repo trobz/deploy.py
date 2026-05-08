@@ -16,7 +16,7 @@ def render_unit(template_name: str, **variables: Any) -> str:
     Returns:
         Rendered unit file content as a string.
     """
-    pkg = files("deploy.templates")
+    pkg = files("trobz_deploy.templates")
     source = (pkg / f"{template_name}.service.j2").read_text(encoding="utf-8")
     env = Environment(autoescape=select_autoescape(["html", "htm", "xml"]))
     template = env.from_string(source)

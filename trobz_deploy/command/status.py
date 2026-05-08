@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import click
 
-from deploy.utils.config import load_config
-from deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.config import load_config
+from trobz_deploy.utils.executor import Executor, ExecutorError
 
 
 @click.command()

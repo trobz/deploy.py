@@ -4,11 +4,11 @@ _src_path: https://github.com/trobz/trobz-python-template.git
 author_email: hailn@trobz.com
 author_username: hailangvn
 enable_github_action: true
-package_name: deploy
+package_name: trobz_deploy
 project_description: CLI tool for deploying and managing applications on remote servers
     over SSH.
-project_name: deploy
+project_name: trobz-deploy
 project_type: cli
-publish_to_pypi: false
-repository_name: deploy
+publish_to_pypi: true
+repository_name: deploy.py
 repository_namespace: trobz

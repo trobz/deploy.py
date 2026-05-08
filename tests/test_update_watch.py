@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from deploy.command.update import update
+from trobz_deploy.command.update import update
 
 
 @pytest.fixture
@@ -21,8 +21,8 @@ def _executor_mock():
 
 def _invoke(runner, extra_args: list[str], side_effect=None):
     with (
-        patch("deploy.command.update.Executor") as MockExecutor,
-        patch("deploy.command.update.load_config", return_value={}),
+        patch("trobz_deploy.command.update.Executor") as MockExecutor,
+        patch("trobz_deploy.command.update.load_config", return_value={}),
     ):
         mock_exec = _executor_mock()
         if side_effect:

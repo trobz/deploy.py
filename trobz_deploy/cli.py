@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import click
 
-from deploy.command.configure import configure
-from deploy.command.status import status
-from deploy.command.update import update
+from trobz_deploy.command.configure import configure
+from trobz_deploy.command.status import status
+from trobz_deploy.command.update import update
 
 
 @click.group()

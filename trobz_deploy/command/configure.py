@@ -4,10 +4,10 @@ from typing import Any
 
 import click
 
-from deploy.utils.config import load_config, resolve_options
-from deploy.utils.executor import Executor, ExecutorError
-from deploy.utils.render import render_unit
-from deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
+from trobz_deploy.utils.config import load_config, resolve_options
+from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.render import render_unit
+from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
 
 
 def _is_git_repo(executor: Executor, path: str) -> bool:

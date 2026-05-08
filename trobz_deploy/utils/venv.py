@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from deploy.utils.executor import Executor
+from trobz_deploy.utils.executor import Executor
 
 
 def setup_odoo_venv(executor: Executor, instance_path: str) -> None:
