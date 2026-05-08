@@ -11,14 +11,10 @@ It supports multiple deployment types:
 
 ## Installation
 
-```bash
-pip install deploy
-```
-
 With [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv tool install deploy
+uv tool install trobz-deploy
 ```
 
 On remote server where applications will be deployed:
