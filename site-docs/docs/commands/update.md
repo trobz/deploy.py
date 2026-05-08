@@ -7,7 +7,7 @@ target host.
 
 ```bash
 deploy [--config FILE] update <instance_name> [<ssh_host>] \
-  [--type odoo|python|service] [-p PORT] [--db DATABASE] [--ignore-hooks]
+  [--type odoo|python|service] [-p PORT] [--db DATABASE] [--ignore-hooks] [--watch]
 ```
 
 ## Arguments
@@ -25,6 +25,7 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] \
 | `-p`, `--port` | — | SSH port on the remote host |
 | `--db` | `<instance_name>` | Override target database name (Odoo only) |
 | `--ignore-hooks` | `False` | Skip all hook execution |
+| `--watch` | `False` | Watch service logs for working information |
 
 ## Steps
 
@@ -63,6 +64,7 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] \
         ```
 
 8. **`post-update` hooks**, then `post-update-success` or `post-update-fail`.
+9. If there is **`--watch`**, watch service logs for working information. Press `Ctrl+C` to exit.
 
 ## Exit codes
 
