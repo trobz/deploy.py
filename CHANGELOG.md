@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.10.1 (2026-05-08)
+
+### Bug Fixes
+
+- **site-docs**: Remove markdown page, add --watch option
+  ([`e77f9cc`](https://github.com/trobz/deploy.py/commit/e77f9ccad543c3c2fb9553539abea2d4f83c6f23))
+
+
 ## v0.10.0 (2026-05-08)
 
 ### Features
