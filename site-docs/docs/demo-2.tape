@@ -2,7 +2,7 @@
 # Showcases: installation, configure/update/status command help
 
 # ── Output ────────────────────────────────────────────────────────────────────
-Output ./site-docs/docs/demo.gif
+Output ./site-docs/docs/demo-2.gif
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 Require deploy
@@ -22,7 +22,6 @@ Set Margin 30
 Set Padding 40
 Set LineHeight 1.3
 
-# ── Scene 1: Installation ─────────────────────────────────────────────────────
 Hide
 Type "export PS1='\[\033[38;2;249;115;22m\]❯\[\033[0m\] '"
 Enter
@@ -30,61 +29,43 @@ Type "clear"
 Enter
 Show
 
+# ── Scene 4: configure command ────────────────────────────────────────────────
+Hide
+Type "cp deploy.demo.yml deploy.yml"
+Enter
+Type "clear"
+Enter
+Show
+
 Sleep 500ms
-Type "uv tool install trobz-deploy"
+Type "deploy configure service-my-project-integration"
 Sleep 400ms
 Enter
 
-Sleep 6s
+Sleep 30s
 
-# ── Scene 2: Top-level help ───────────────────────────────────────────────────
+# ── Scene 5: update command ───────────────────────────────────────────────────
 Hide
 Type "clear"
 Enter
 Show
 
 Sleep 500ms
-Type "deploy --help"
+Type "deploy update service-my-project-integration"
 Sleep 400ms
 Enter
 
-Sleep 6s
+Sleep 30s
 
-# ── Scene 3: configure --help ─────────────────────────────────────────────────
+# ── Scene 6: status command ───────────────────────────────────────────────────
 Hide
 Type "clear"
 Enter
 Show
 
 Sleep 500ms
-Type "deploy configure --help"
+Type "deploy status service-my-project-integration"
 Sleep 400ms
 Enter
 
-Sleep 6s
-
-# ── Scene 4: update --help ────────────────────────────────────────────────────
-Hide
-Type "clear"
-Enter
-Show
-
-Sleep 500ms
-Type "deploy update --help"
-Sleep 400ms
-Enter
-
-Sleep 6s
-
-# ── Scene 5: status --help ────────────────────────────────────────────────────
-Hide
-Type "clear"
-Enter
-Show
-
-Sleep 500ms
-Type "deploy status --help"
-Sleep 400ms
-Enter
-
-Sleep 6s
+Sleep 12s

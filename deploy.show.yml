@@ -1,0 +1,20 @@
+service-my-project-integration:
+  ssh_host: user@remote-host.com
+  ssh_port: 12345
+  repo_url: git@github.com:hailangvn/my-project.git
+  exec_start: python -m my_project.main
+  hooks:
+    pre-update:
+      - echo "Update starting"
+    pre-update-required:
+      - echo "Update required"
+    pre-update-success:
+      - echo "Pre-checks passed"
+    pre-update-fail:
+      - echo "Pre-checks failed"
+    post-update:
+      - echo "Post update"
+    post-update-success:
+      - echo "Update succeeded"
+    post-update-fail:
+      - echo "Update failed"
