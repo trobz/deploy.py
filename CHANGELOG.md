@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.10.2 (2026-05-15)
+
+### Bug Fixes
+
+- **site-docs**: Demo with a project
+  ([`6f8b9fb`](https://github.com/trobz/deploy.py/commit/6f8b9fbbc5f8ceb8371ac0eb53be560a09ff7e3f))
+
+
 ## v0.10.1 (2026-05-08)
 
 ### Bug Fixes
