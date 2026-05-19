@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.11.0 (2026-05-19)
+
+### Documentation
+
+- **status**: Document --watch flag
+  ([`2622671`](https://github.com/trobz/deploy.py/commit/262267193a51e9ad3c07bd5ce08a48e75fd7ca4d))
+
+### Features
+
+- **status**: Add --watch flag to stream logs after status
+  ([`0766cc2`](https://github.com/trobz/deploy.py/commit/0766cc2bfa9325a8fd7f925b8195673732f02982))
+
+
 ## v0.10.2 (2026-05-15)
 
 ### Bug Fixes
