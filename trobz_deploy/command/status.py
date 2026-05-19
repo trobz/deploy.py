@@ -17,12 +17,20 @@ from trobz_deploy.utils.executor import Executor, ExecutorError
     default=None,
     help="SSH port on the remote host.",
 )
+@click.option(
+    "--watch",
+    "watch",
+    is_flag=True,
+    default=False,
+    help="Stream service logs with journalctl after showing status.",
+)
 @click.pass_context
 def status(
     ctx: click.Context,
     instance_name: str,
     ssh_host: str | None,
     ssh_port: int | None,
+    watch: bool,
 ) -> None:
     """Show status of a deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -77,3 +85,10 @@ def status(
     click.echo(f"Remote:    {remote_url}")
     click.echo(f"Branch:    {branch} ({commit})")
     click.echo(f"Unit:      {unit_line}")
+
+    if watch:
+        click.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+        try:
+            executor.stream(f"journalctl --user -u {instance_name} -f")
+        except KeyboardInterrupt:
+            click.echo()

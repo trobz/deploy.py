@@ -5,7 +5,7 @@ Show the current state of a deployment instance: git info and systemd unit statu
 ## Signature
 
 ```bash
-deploy [--config FILE] status <instance_name> [<ssh_host>] [-p PORT]
+deploy [--config FILE] status <instance_name> [<ssh_host>] [-p PORT] [--watch]
 ```
 
 ## Arguments
@@ -20,6 +20,7 @@ deploy [--config FILE] status <instance_name> [<ssh_host>] [-p PORT]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `-p`, `--port` | — | SSH port on the remote host |
+| `--watch` | `False` | Stream service logs with journalctl after showing status |
 
 ## Output
 
@@ -38,6 +39,7 @@ Unit:      active (running) since 2026-03-09 08:12:03
    - `git rev-parse --abbrev-ref HEAD` → branch
    - `git rev-parse --short HEAD` → commit hash
 3. **Unit status** — via `systemctl --user show`.
+4. If **`--watch`**, stream live logs via `journalctl --user -u <instance_name> -f`. Press `Ctrl+C` to exit.
 
 ## Exit codes
 
@@ -58,4 +60,7 @@ deploy status odoo-myproject-production deploy@myserver.example.com
 
 # Custom SSH port
 deploy status odoo-myproject-production -p 2222
+
+# Show status then tail the logs
+deploy status odoo-myproject-production --watch
 ```
