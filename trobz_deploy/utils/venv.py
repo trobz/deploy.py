@@ -1,10 +1,23 @@
 from __future__ import annotations
 
-from trobz_deploy.utils.executor import Executor
+import click
+
+from trobz_deploy.utils.executor import Executor, ExecutorError
 
 
-def setup_odoo_venv(executor: Executor, instance_path: str) -> None:
+def _venv_exists(executor: Executor, instance_path: str) -> bool:
+    try:
+        executor.run(f"test -d {instance_path}/.venv")
+    except ExecutorError:
+        return False
+    return True
+
+
+def setup_odoo_venv(executor: Executor, instance_path: str, force: bool = False) -> None:
     """Create or update an Odoo virtual environment using ``odoo-venv``."""
+    if force and _venv_exists(executor, instance_path):
+        click.secho("Venv exists, skipping venv creation (--force).", fg="yellow")
+        return
     executor.run(
         f"odoo-venv create --project-dir {instance_path} --preset project",
         cwd=instance_path,
@@ -13,8 +26,10 @@ def setup_odoo_venv(executor: Executor, instance_path: str) -> None:
 
 def setup_python_venv(executor: Executor, instance_path: str, force: bool = False) -> None:
     """Create a venv with ``uv`` and install dependencies from requirements.txt."""
-    clear_flag = " --clear" if force else ""
-    executor.run(f"uv venv{clear_flag} .venv", cwd=instance_path)
+    if force and _venv_exists(executor, instance_path):
+        click.secho("Venv exists, skipping venv creation (--force).", fg="yellow")
+    else:
+        executor.run("uv venv .venv", cwd=instance_path)
     setup_python_deps(executor, instance_path)
 
 
@@ -25,8 +40,10 @@ def setup_python_deps(executor: Executor, instance_path: str) -> None:
 
 def setup_package_venv(executor: Executor, instance_path: str, requirements: list[str], force: bool = False) -> None:
     """Create a venv with ``uv`` and install pip packages directly."""
-    clear_flag = " --clear" if force else ""
-    executor.run(f"uv venv{clear_flag} .venv", cwd=instance_path)
+    if force and _venv_exists(executor, instance_path):
+        click.secho("Venv exists, skipping venv creation (--force).", fg="yellow")
+    else:
+        executor.run("uv venv .venv", cwd=instance_path)
     executor.run(f"uv pip install {' '.join(requirements)}", cwd=instance_path)
 
 
