@@ -21,7 +21,7 @@ from trobz_deploy.utils.venv import setup_python_deps, upgrade_package
 @click.option(
     "--db",
     default=None,
-    help="Override the target database name (Odoo only).",
+    help="Override the target database name (Odoo only). Can be comma-separated for multiple databases.",
 )
 @click.option(
     "-p",
@@ -89,7 +89,9 @@ def update(  # noqa: C901
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_type: str = opts["type"]
-    eff_db: str = opts.get("db", instance_name)
+    eff_db: str | list[str] = opts.get("db", instance_name)
+    if isinstance(eff_db, str):
+        eff_db = eff_db.split(",")
     eff_repo_branch: str | None = opts.get("repo_branch")
     _req = opts.get("requirements")
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
@@ -196,10 +198,12 @@ def update(  # noqa: C901
     try:
         if eff_type == "odoo":
             addons_path = get_addons_path(executor, instance_path)
-            executor.run(
-                f".venv/bin/click-odoo-update -d {eff_db} --addons-path={addons_path}",
-                cwd=instance_path,
-            )
+            for db in eff_db:
+                click.secho(f"\nUpdating database {db!r}…", fg="green")
+                executor.run(
+                    f".venv/bin/click-odoo-update -d {db} --addons-path={addons_path}",
+                    cwd=instance_path,
+                )
         executor.run(f"systemctl --user restart {instance_name}")
     except ExecutorError as exc:
         run_hooks("post-update")
