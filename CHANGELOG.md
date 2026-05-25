@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.14.0 (2026-05-25)
+
+### Features
+
+- **configure**: Inject EnvironmentFile from config/server.env when present
+  ([`a59dfde`](https://github.com/trobz/deploy.py/commit/a59dfde0c592a2777650d74c61dfb628298e4875))
+
+
 ## v0.13.0 (2026-05-25)
 
 ### Features
