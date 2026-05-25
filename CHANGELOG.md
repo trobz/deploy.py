@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.13.0 (2026-05-25)
+
+### Features
+
+- **configure,update,status**: Support service type without repo or build
+  ([`a9a0abf`](https://github.com/trobz/deploy.py/commit/a9a0abff1624eb60583312e45ad30b719f207872))
+
+
 ## v0.12.0 (2026-05-22)
 
 ### Documentation
