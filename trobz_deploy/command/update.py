@@ -147,6 +147,9 @@ def update(  # noqa: C901
             run_hooks("post-update-fail")
             msg = click.style(f"Package upgrade failed: {exc}", fg="red")
             raise click.ClickException(msg) from exc
+    elif eff_type == "service" and not opts.get("repo_url"):
+        # Binary/system service mode: no repo to pull, skip straight to restart
+        click.secho("\nNo repository to update, skipping pull…", fg="yellow")
     else:
         # Repo mode: git pull then update deps
         try:

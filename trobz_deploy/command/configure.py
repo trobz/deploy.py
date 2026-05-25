@@ -120,6 +120,10 @@ def configure(  # noqa: C901
         except ExecutorError:
             click.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
             executor.run(f"mkdir -p {instance_path}")
+    elif eff_type == "service" and not eff_repo_url:
+        # Binary/system service mode: no repo, just ensure a working directory exists
+        click.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
+        executor.run(f"mkdir -p {instance_path}")
     else:
         if not eff_repo_url:
             msg = click.style(
@@ -171,13 +175,8 @@ def configure(  # noqa: C901
                 )
         else:  # service
             build_cmd: str | None = opts.get("build")
-            if not build_cmd:
-                msg = click.style(
-                    "build command is required for service type. Set it in deploy.yml.",
-                    fg="red",
-                )
-                raise click.ClickException(msg)
-            executor.run(build_cmd, cwd=service_path)
+            if build_cmd:
+                executor.run(build_cmd, cwd=service_path)
     except ExecutorError as exc:
         raise click.ClickException(click.style(str(exc), fg="red")) from exc
 
