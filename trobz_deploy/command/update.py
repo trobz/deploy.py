@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import click
+from enum import Enum
+from typing import Annotated
+
+import typer
 
 from trobz_deploy.utils.addons import get_addons_path
 from trobz_deploy.utils.config import load_config, resolve_options
@@ -8,67 +11,40 @@ from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.venv import setup_python_deps, upgrade_package
 
 
-@click.command()
-@click.argument("instance_name")
-@click.argument("ssh_host", required=False)
-@click.option(
-    "--type",
-    "deploy_type",
-    type=click.Choice(["odoo", "python", "service"]),
-    default=None,
-    help="Deployment type (auto-detected from instance name prefix if omitted).",
-)
-@click.option(
-    "--db",
-    default=None,
-    help="Override the target database name (Odoo only). Can be comma-separated for multiple databases.",
-)
-@click.option(
-    "-p",
-    "--port",
-    "ssh_port",
-    type=int,
-    default=None,
-    help="SSH port on the remote host.",
-)
-@click.option(
-    "--ignore-hooks",
-    "ignore_hooks",
-    is_flag=True,
-    default=False,
-    help="Skip all hook execution.",
-)
-@click.option(
-    "--repo-subdir",
-    "repo_subdir",
-    default=None,
-    help="Subdirectory within the repo to use as the service root (for monorepos).",
-)
-@click.option(
-    "--repo-branch",
-    "repo_branch",
-    default=None,
-    help="Git branch to pull (defaults to the currently checked-out branch).",
-)
-@click.option(
-    "--watch",
-    "watch",
-    is_flag=True,
-    default=False,
-    help="Stream service logs with journalctl after a successful update.",
-)
-@click.pass_context
+class DeployType(str, Enum):
+    odoo = "odoo"
+    python = "python"
+    service = "service"
+
+
 def update(  # noqa: C901
-    ctx: click.Context,
-    instance_name: str,
-    ssh_host: str | None,
-    deploy_type: str | None,
-    db: str | None,
-    ssh_port: int | None,
-    ignore_hooks: bool,
-    repo_subdir: str | None,
-    repo_branch: str | None,
-    watch: bool,
+    ctx: typer.Context,
+    instance_name: Annotated[str, typer.Argument()],
+    ssh_host: Annotated[str | None, typer.Argument()] = None,
+    deploy_type: Annotated[
+        DeployType | None,
+        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
+    ] = None,
+    db: Annotated[
+        str | None,
+        typer.Option(
+            help="Override the target database name (Odoo only). Can be comma-separated for multiple databases."
+        ),
+    ] = None,
+    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
+    ignore_hooks: Annotated[bool, typer.Option("--ignore-hooks", help="Skip all hook execution.")] = False,
+    repo_subdir: Annotated[
+        str | None,
+        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
+    ] = None,
+    repo_branch: Annotated[
+        str | None,
+        typer.Option(help="Git branch to pull (defaults to the currently checked-out branch)."),
+    ] = None,
+    watch: Annotated[
+        bool,
+        typer.Option("--watch", help="Stream service logs with journalctl after a successful update."),
+    ] = False,
 ) -> None:
     """Update an existing deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -78,13 +54,14 @@ def update(  # noqa: C901
             instance_name,
             ssh_host=ssh_host,
             ssh_port=ssh_port,
-            deploy_type=deploy_type,
+            deploy_type=deploy_type.value if deploy_type else None,
             db=db,
             repo_subdir=repo_subdir,
             repo_branch=repo_branch,
         )
     except ValueError as exc:
-        raise click.ClickException(click.style(str(exc), fg="red")) from exc
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
@@ -111,27 +88,24 @@ def update(  # noqa: C901
             try:
                 executor.run(cmd, cwd=instance_path)
             except ExecutorError as exc:
-                click.secho(
-                    f"Hook {hook_name!r} failed: {exc}",
-                    fg="red",
+                typer.echo(
+                    typer.style(f"Hook {hook_name!r} failed: {exc}", fg="red"),
                     err=True,
                 )
                 return False
         return True
 
     # Step 2: pre-update hooks (non-blocking)
-    click.secho("\nRunning pre-update hooks…", fg="green")
+    typer.secho("\nRunning pre-update hooks…", fg="green")
     run_hooks("pre-update")
 
     # Step 3: pre-update-required hooks (blocking on failure)
-    click.secho("\nRunning pre-update-required hooks…", fg="green")
+    typer.secho("\nRunning pre-update-required hooks…", fg="green")
     if not run_hooks("pre-update-required"):
         run_hooks("pre-update-fail")
-        msg = click.style(
-            "pre-update-required hook failed. Update aborted.",
-            fg="red",
-        )
-        raise click.ClickException(msg)
+        msg = "pre-update-required hook failed. Update aborted."
+        typer.echo(typer.style(msg, fg="red"), err=True)
+        raise typer.Exit(code=1)
 
     # Step 4: pre-update-success
     run_hooks("pre-update-success")
@@ -139,29 +113,27 @@ def update(  # noqa: C901
     # Step 5+6: Pull/upgrade code and update dependencies
     if eff_type == "python" and eff_requirements:
         # Package mode: upgrade pip package directly, no git pull
-        click.secho("\nUpgrading package…", fg="green")
+        typer.secho("\nUpgrading package…", fg="green")
         try:
             upgrade_package(executor, instance_path, eff_requirements)
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
-            msg = click.style(f"Package upgrade failed: {exc}", fg="red")
-            raise click.ClickException(msg) from exc
+            typer.echo(typer.style(f"Package upgrade failed: {exc}", fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
     elif eff_type == "service" and not opts.get("repo_url"):
         # Binary/system service mode: no repo to pull, skip straight to restart
-        click.secho("\nNo repository to update, skipping pull…", fg="yellow")
+        typer.secho("\nNo repository to update, skipping pull…", fg="yellow")
     else:
         # Repo mode: git pull then update deps
         try:
             executor.run(f"test -d {instance_path}/.git")
         except ExecutorError:
-            msg = click.style(
-                f"Instance directory not found or not a git repo: ~/{instance_name}",
-                fg="red",
-            )
-            raise click.ClickException(msg) from None
+            msg = f"Instance directory not found or not a git repo: ~/{instance_name}"
+            typer.echo(typer.style(msg, fg="red"), err=True)
+            raise typer.Exit(code=1) from None
 
-        click.secho("\nPulling latest code…", fg="green")
+        typer.secho("\nPulling latest code…", fg="green")
         try:
             if eff_repo_branch:
                 executor.run(
@@ -173,10 +145,10 @@ def update(  # noqa: C901
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
-            msg = click.style(f"git pull failed: {exc}", fg="red")
-            raise click.ClickException(msg) from exc
+            typer.echo(typer.style(f"git pull failed: {exc}", fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
 
-        click.secho("\nUpdating dependencies…", fg="green")
+        typer.secho("\nUpdating dependencies…", fg="green")
         try:
             if eff_type == "odoo":
                 executor.run(
@@ -193,16 +165,16 @@ def update(  # noqa: C901
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
-            msg = click.style(f"Dependency update failed: {exc}", fg="red")
-            raise click.ClickException(msg) from exc
+            typer.echo(typer.style(f"Dependency update failed: {exc}", fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
 
     # Step 7: Apply changes
-    click.secho("\nApplying changes…", fg="green")
+    typer.secho("\nApplying changes…", fg="green")
     try:
         if eff_type == "odoo":
             addons_path = get_addons_path(executor, instance_path)
             for db in eff_db:
-                click.secho(f"\nUpdating database {db!r}…", fg="green")
+                typer.secho(f"\nUpdating database {db!r}…", fg="green")
                 executor.run(
                     f".venv/bin/click-odoo-update -d {db} --addons-path={addons_path}",
                     cwd=instance_path,
@@ -211,18 +183,18 @@ def update(  # noqa: C901
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
-        msg = click.style(f"Restart/upgrade failed: {exc}", fg="red")
-        raise click.ClickException(msg) from exc
+        typer.echo(typer.style(f"Restart/upgrade failed: {exc}", fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
     # Step 8: post-update hooks
     run_hooks("post-update")
     run_hooks("post-update-success")
 
-    click.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
+    typer.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
 
     if watch:
-        click.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+        typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
         try:
             executor.stream(f"journalctl --user -u {instance_name} -f")
         except KeyboardInterrupt:
-            click.echo()
+            typer.echo()

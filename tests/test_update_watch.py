@@ -3,9 +3,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
+from typer.testing import CliRunner
 
-from trobz_deploy.command.update import update
+from trobz_deploy.cli import app
 
 
 @pytest.fixture
@@ -29,9 +29,8 @@ def _invoke(runner, extra_args: list[str], side_effect=None):
             mock_exec.stream.side_effect = side_effect
         MockExecutor.return_value = mock_exec
         result = runner.invoke(
-            update,
-            ["service-myapp-production", "--type", "service", *extra_args],
-            obj={"config": "", "verbose": False},
+            app,
+            ["update", "service-myapp-production", "--type", "service", *extra_args],
         )
         return result, mock_exec
 

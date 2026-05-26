@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from typing import Any
+from enum import Enum
+from typing import Annotated, Any
 
-import click
+import typer
 
 from trobz_deploy.utils.config import load_config, resolve_options
 from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.render import render_unit
 from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
+
+
+class DeployType(str, Enum):
+    odoo = "odoo"
+    python = "python"
+    service = "service"
 
 
 def _is_git_repo(executor: Executor, path: str) -> bool:
@@ -19,54 +26,28 @@ def _is_git_repo(executor: Executor, path: str) -> bool:
         return True
 
 
-@click.command()
-@click.argument("instance_name")
-@click.argument("ssh_host", required=False)
-@click.argument("repo_url", required=False)
-@click.option(
-    "--type",
-    "deploy_type",
-    type=click.Choice(["odoo", "python", "service"]),
-    default=None,
-    help="Deployment type (auto-detected from instance name prefix if omitted).",
-)
-@click.option(
-    "-p",
-    "--port",
-    "ssh_port",
-    type=int,
-    default=None,
-    help="SSH port on the remote host.",
-)
-@click.option(
-    "--force",
-    is_flag=True,
-    default=False,
-    help="Re-run setup steps even if the instance directory already exists.",
-)
-@click.option(
-    "--repo-subdir",
-    "repo_subdir",
-    default=None,
-    help="Subdirectory within the repo to use as the service root (for monorepos).",
-)
-@click.option(
-    "--repo-branch",
-    "repo_branch",
-    default=None,
-    help="Git branch to clone and track (defaults to the repository's default branch).",
-)
-@click.pass_context
 def configure(  # noqa: C901
-    ctx: click.Context,
-    instance_name: str,
-    ssh_host: str | None,
-    repo_url: str | None,
-    deploy_type: str | None,
-    ssh_port: int | None,
-    force: bool,
-    repo_subdir: str | None,
-    repo_branch: str | None,
+    ctx: typer.Context,
+    instance_name: Annotated[str, typer.Argument()],
+    ssh_host: Annotated[str | None, typer.Argument()] = None,
+    repo_url: Annotated[str | None, typer.Argument()] = None,
+    deploy_type: Annotated[
+        DeployType | None,
+        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
+    ] = None,
+    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Re-run setup steps even if the instance directory already exists."),
+    ] = False,
+    repo_subdir: Annotated[
+        str | None,
+        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
+    ] = None,
+    repo_branch: Annotated[
+        str | None,
+        typer.Option(help="Git branch to clone and track (defaults to the repository's default branch)."),
+    ] = None,
 ) -> None:
     """Configure a new deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -78,11 +59,12 @@ def configure(  # noqa: C901
             ssh_port=ssh_port,
             repo_url=repo_url,
             repo_branch=repo_branch,
-            deploy_type=deploy_type,
+            deploy_type=deploy_type.value if deploy_type else None,
             repo_subdir=repo_subdir,
         )
     except ValueError as exc:
-        raise click.ClickException(click.style(str(exc), fg="red")) from exc
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
@@ -93,11 +75,9 @@ def configure(  # noqa: C901
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
 
     if eff_type == "python" and eff_requirements and eff_repo_url:
-        msg = click.style(
-            "requirements and repo_url are mutually exclusive for python type.",
-            fg="red",
-        )
-        raise click.ClickException(msg)
+        msg = "requirements and repo_url are mutually exclusive for python type."
+        typer.echo(typer.style(msg, fg="red"), err=True)
+        raise typer.Exit(code=1)
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
@@ -111,47 +91,43 @@ def configure(  # noqa: C901
         try:
             executor.run(f"test -d {instance_path}")
             if not force:
-                msg = click.style(
-                    f"Instance directory already exists: ~/{instance_name}\nUse --force to re-run setup.",
-                    fg="yellow",
-                )
-                raise click.ClickException(msg)
-            click.secho("\nDirectory exists, skipping mkdir (--force).", fg="yellow")
+                msg = f"Instance directory already exists: ~/{instance_name}\nUse --force to re-run setup."
+                typer.echo(typer.style(msg, fg="yellow"), err=True)
+                raise typer.Exit(code=1)
+            typer.secho("\nDirectory exists, skipping mkdir (--force).", fg="yellow")
         except ExecutorError:
-            click.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
+            typer.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
             executor.run(f"mkdir -p {instance_path}")
     elif eff_type == "service" and not eff_repo_url:
         # Binary/system service mode: no repo, just ensure a working directory exists
-        click.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
+        typer.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
         executor.run(f"mkdir -p {instance_path}")
     else:
         if not eff_repo_url:
-            msg = click.style(
-                "repo_url is required. Provide it as an argument or set it in deploy.yml.",
-                fg="red",
-            )
-            raise click.ClickException(msg)
+            msg = "repo_url is required. Provide it as an argument or set it in deploy.yml."
+            typer.echo(typer.style(msg, fg="red"), err=True)
+            raise typer.Exit(code=1)
 
         # Repo mode: clone
         if _is_git_repo(executor, instance_path):
             if not force:
-                msg = click.style(
+                msg = (
                     f"Instance directory already exists: ~/{instance_name}\n"
-                    "Use --force to skip cloning and re-run setup.",
-                    fg="yellow",
+                    "Use --force to skip cloning and re-run setup."
                 )
-                raise click.ClickException(msg)
-            click.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
+                typer.echo(typer.style(msg, fg="yellow"), err=True)
+                raise typer.Exit(code=1)
+            typer.secho("\nDirectory exists, skipping clone (--force).", fg="yellow")
         else:
-            click.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
+            typer.secho(f"\nCloning {eff_repo_url} into ~/{instance_name}…", fg="green")
             try:
                 clone_cmd = f"git clone --recurse-submodules {eff_repo_url} $HOME/{instance_name}"
                 if eff_repo_branch:
                     clone_cmd += f" --branch {eff_repo_branch}"
                 executor.run(clone_cmd)
             except ExecutorError as exc:
-                msg = click.style(f"Git clone failed: {exc}", fg="red")
-                raise click.ClickException(msg) from exc
+                typer.echo(typer.style(f"Git clone failed: {exc}", fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
 
     if eff_type == "odoo":
         executor.run(
@@ -160,7 +136,7 @@ def configure(  # noqa: C901
         )
 
     # Step 3: Set up environment
-    click.secho(f"\nSetting up {eff_type} environment…", fg="green")
+    typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
     try:
         if eff_type == "odoo":
             setup_odoo_venv(executor, instance_path, force=force)
@@ -178,10 +154,11 @@ def configure(  # noqa: C901
             if build_cmd:
                 executor.run(build_cmd, cwd=service_path)
     except ExecutorError as exc:
-        raise click.ClickException(click.style(str(exc), fg="red")) from exc
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
     # Step 4: Install systemd unit
-    click.secho("\nInstalling systemd unit…", fg="green")
+    typer.secho("\nInstalling systemd unit…", fg="green")
     unit_instance_path = instance_path if eff_requirements else service_path
     venv_path = f"{unit_instance_path}/.venv"
 
@@ -203,11 +180,9 @@ def configure(  # noqa: C901
             if res == "server.py":
                 exec_start = "python server.py"
         if not exec_start:
-            msg = click.style(
-                "exec_start is required for service or python type. Set it in deploy.yml.",
-                fg="red",
-            )
-            raise click.ClickException(msg)
+            msg = "exec_start is required for service or python type. Set it in deploy.yml."
+            typer.echo(typer.style(msg, fg="red"), err=True)
+            raise typer.Exit(code=1)
         if eff_type == "python":
             template_vars["venv_path"] = venv_path
         template_vars["exec_start"] = exec_start
@@ -215,8 +190,8 @@ def configure(  # noqa: C901
     try:
         unit_content = render_unit(eff_type, **template_vars)
     except Exception as exc:
-        msg = click.style(f"Template rendering failed: {exc}", fg="red")
-        raise click.ClickException(msg) from exc
+        typer.echo(typer.style(f"Template rendering failed: {exc}", fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
     unit_dir = "$HOME/.config/systemd/user"
     unit_path = f"{unit_dir}/{instance_name}.service"
@@ -227,6 +202,7 @@ def configure(  # noqa: C901
         executor.run("systemctl --user daemon-reload")
         executor.run(f"systemctl --user enable --now {instance_name}")
     except ExecutorError as exc:
-        raise click.ClickException(click.style(str(exc), fg="red")) from exc
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
 
-    click.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
+    typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
