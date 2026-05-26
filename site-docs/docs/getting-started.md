@@ -1,3 +1,12 @@
+---
+icon: lucide/rocket
+description: CLI tool for deploying and managing applications on remote servers over SSH.
+tags:
+  - installation
+  - quickstart
+  - presets
+---
+
 # Getting Started
 
 ## Installation
@@ -69,5 +78,5 @@ deploy status odoo-myproject-production
 
 - [Instance Names](instance-names.md) — understand the naming convention
 - [Configuration](configuration.md) — full `deploy.yml` reference
-- [Commands](commands/index.md) — detailed command documentation
+- [Commands](cli-reference.md) — detailed command documentation
 - [Hooks](hooks.md) — automate pre/post update tasks
