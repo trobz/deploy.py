@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import click
+from typing import Annotated
+
+import typer
 
 from trobz_deploy.utils.config import load_config
 from trobz_deploy.utils.executor import Executor, ExecutorError
@@ -36,31 +38,15 @@ def _get_git_info(executor: Executor, instance_path: str) -> tuple[str, str, str
     return remote_url, branch, commit
 
 
-@click.command()
-@click.argument("instance_name")
-@click.argument("ssh_host", required=False)
-@click.option(
-    "-p",
-    "--port",
-    "ssh_port",
-    type=int,
-    default=None,
-    help="SSH port on the remote host.",
-)
-@click.option(
-    "--watch",
-    "watch",
-    is_flag=True,
-    default=False,
-    help="Stream service logs with journalctl after showing status.",
-)
-@click.pass_context
 def status(
-    ctx: click.Context,
-    instance_name: str,
-    ssh_host: str | None,
-    ssh_port: int | None,
-    watch: bool,
+    ctx: typer.Context,
+    instance_name: Annotated[str, typer.Argument()],
+    ssh_host: Annotated[str | None, typer.Argument()] = None,
+    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
+    watch: Annotated[
+        bool,
+        typer.Option("--watch", help="Stream service logs with journalctl after showing status."),
+    ] = False,
 ) -> None:
     """Show status of a deployment instance."""
     cfg = load_config(ctx.obj["config"], instance_name)
@@ -77,7 +63,8 @@ def status(
         executor.run(f"test -d {instance_path}")
     except ExecutorError:
         msg = f"Instance directory not found: ~/{instance_name}"
-        raise click.ClickException(msg) from None
+        typer.echo(typer.style(msg, fg="red"), err=True)
+        raise typer.Exit(code=1) from None
 
     # Step 3: Git info (skipped for no-repo service instances)
     has_repo = bool(cfg.get("repo_url"))
@@ -87,20 +74,21 @@ def status(
             remote_url, branch, commit = _get_git_info(executor, instance_path)
         except ExecutorError as exc:
             msg = f"Failed to get git info: {exc}"
-            raise click.ClickException(msg) from exc
+            typer.echo(typer.style(msg, fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
 
     # Step 4: systemd unit status
     unit_line = _get_unit_line(executor, instance_name)
 
-    click.echo(f"Instance:  {instance_name}")
+    typer.echo(f"Instance:  {instance_name}")
     if has_repo:
-        click.echo(f"Remote:    {remote_url}")
-        click.echo(f"Branch:    {branch} ({commit})")
-    click.echo(f"Unit:      {unit_line}")
+        typer.echo(f"Remote:    {remote_url}")
+        typer.echo(f"Branch:    {branch} ({commit})")
+    typer.echo(f"Unit:      {unit_line}")
 
     if watch:
-        click.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+        typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
         try:
             executor.stream(f"journalctl --user -u {instance_name} -f")
         except KeyboardInterrupt:
-            click.echo()
+            typer.echo()

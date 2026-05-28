@@ -9,7 +9,7 @@ license = "AGPL-3.0"
 license-files = ["LICENSE"]
 
 dependencies = [
-    "click>=8.0",
+    "typer>=0.20",
     "jinja2>=3.0",
     "pyyaml>=6.0",
 ]
@@ -17,7 +17,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/trobz/deploy.py"
 [project.scripts]
-deploy = "trobz_deploy.cli:cli"
+deploy = "trobz_deploy.cli:app"
 
 [dependency-groups]
 dev = [

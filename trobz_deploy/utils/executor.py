@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import subprocess
 
-import click
+import typer
 
 
 class ExecutorError(Exception):
@@ -57,7 +57,7 @@ class Executor:
 
         if self.verbose:
             display = argv[-1] if is_remote else command
-            click.echo(f"$ {display}", err=True)
+            typer.echo(f"$ {display}", err=True)
 
         result = subprocess.run(  # noqa: S603
             argv,
@@ -68,7 +68,7 @@ class Executor:
         )
 
         if self.verbose and result.stdout:
-            click.echo(result.stdout, nl=False)
+            typer.echo(result.stdout, nl=False)
 
         if check and result.returncode != 0:
             err = (result.stderr or "").strip()
@@ -89,7 +89,7 @@ class Executor:
 
         if self.verbose:
             display = argv[-1] if is_remote else command
-            click.echo(f"$ {display}", err=True)
+            typer.echo(f"$ {display}", err=True)
 
         result = subprocess.run(  # noqa: S603
             argv,
@@ -118,7 +118,7 @@ class Executor:
         is_remote = isinstance(argv, list)
         if self.verbose:
             display = argv[-1] if is_remote else command
-            click.echo(f"$ {display}", err=True)
+            typer.echo(f"$ {display}", err=True)
         subprocess.run(argv, shell=not is_remote, cwd=cwd if not is_remote else None)  # noqa: S603
 
     def write_file(self, content: str, remote_path: str) -> None:
@@ -129,7 +129,7 @@ class Executor:
         """
         b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
         if self.verbose:
-            click.echo(f"Writing to {remote_path}\n{content}")
+            typer.echo(f"Writing to {remote_path}\n{content}")
         verbose = self.verbose
         self.verbose = False
         self.run(f"echo '{b64}' | base64 -d > {remote_path}")

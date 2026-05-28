@@ -4,7 +4,6 @@
 
 ## Project
 
-
 - **Type**: CLI (Typer)
 
 - **Language**: Python 3.10+
@@ -12,9 +11,7 @@
 
 ## Entry Points
 
-
-- `deploy/cli.py` — CLI entry point
-
+- `trobz_deploy/cli.py` — CLI entry point
 
 ## Commands
 
