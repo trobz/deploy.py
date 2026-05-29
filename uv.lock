@@ -894,7 +894,7 @@ wheels = [
 
 [[package]]
 name = "trobz-deploy"
-version = "0.15.1"
+version = "0.15.2"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },

@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.15.2 (2026-05-29)
+
+### Bug Fixes
+
+- **docs**: Mention about config/odoo.conf file
+  ([`9c85e4b`](https://github.com/trobz/deploy.py/commit/9c85e4b9623b04e5325a853831f76f34b2834d91))
+
+- **update**: Specify config file when updating odoo modules
+  ([`5c8c6e3`](https://github.com/trobz/deploy.py/commit/5c8c6e3f8d9c660d7eec7a7e20fd7faa51601b54))
+
+
 ## v0.15.1 (2026-05-28)
 
 ### Bug Fixes
