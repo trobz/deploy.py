@@ -62,6 +62,8 @@ odoo-myproject-production:
 deploy configure odoo-myproject-production
 ```
 
+Make sure the repo has config/odoo.conf file that have odoo configuration.
+
 **3. Update the instance** (pull + sync venv + upgrade + restart):
 
 ```bash

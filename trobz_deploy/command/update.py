@@ -176,7 +176,7 @@ def update(  # noqa: C901
             for db in eff_db:
                 typer.secho(f"\nUpdating database {db!r}…", fg="green")
                 executor.run(
-                    f".venv/bin/click-odoo-update -d {db} --addons-path={addons_path}",
+                    f".venv/bin/click-odoo-update --config config/odoo.conf -d {db} --addons-path={addons_path}",
                     cwd=instance_path,
                 )
         executor.run(f"systemctl --user restart {instance_name}")
