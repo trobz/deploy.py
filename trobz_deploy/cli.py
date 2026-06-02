@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from trobz_deploy.command.configure import configure
+from trobz_deploy.command.restart import restart
 from trobz_deploy.command.status import status
 from trobz_deploy.command.update import update
 
@@ -30,4 +31,5 @@ def cli(
 
 app.command()(configure)
 app.command()(update)
+app.command()(restart)
 app.command()(status)
