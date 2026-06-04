@@ -56,7 +56,8 @@ def status(
     eff_ssh_port: int | None = ssh_port if ssh_port is not None else cfg.get("ssh_port")
 
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
-    instance_path = f"$HOME/{instance_name}"
+    home_dir = executor.capture("echo $HOME")
+    instance_path = f"{home_dir}/{instance_name}"
 
     # Step 2: Verify instance directory exists
     try:
