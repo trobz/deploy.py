@@ -88,8 +88,4 @@ def status(
     typer.echo(f"Unit:      {unit_line}")
 
     if watch:
-        typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
-        try:
-            executor.stream(f"journalctl --user -u {instance_name} -f")
-        except KeyboardInterrupt:
-            typer.echo()
+        executor.watch_logs(instance_name)

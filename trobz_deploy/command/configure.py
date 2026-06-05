@@ -212,8 +212,4 @@ def configure(  # noqa: C901
     typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
 
     if watch:
-        typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
-        try:
-            executor.stream(f"journalctl --user -u {instance_name} -f")
-        except KeyboardInterrupt:
-            typer.echo()
+        executor.watch_logs(instance_name)

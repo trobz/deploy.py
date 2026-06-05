@@ -26,7 +26,7 @@ def _invoke(runner, extra_args: list[str], side_effect=None):
     ):
         mock_exec = _executor_mock()
         if side_effect:
-            mock_exec.stream.side_effect = side_effect
+            mock_exec.watch_logs.side_effect = side_effect
         MockExecutor.return_value = mock_exec
         result = runner.invoke(
             app,
@@ -39,18 +39,19 @@ def test_watch_streams_journalctl_after_success(runner):
     result, mock_exec = _invoke(runner, ["--watch"])
 
     assert result.exit_code == 0
-    mock_exec.stream.assert_called_once_with("journalctl --user -u service-myapp-production -f")
+    mock_exec.watch_logs.assert_called_once_with("service-myapp-production")
 
 
 def test_no_watch_does_not_stream(runner):
     result, mock_exec = _invoke(runner, [])
 
     assert result.exit_code == 0
-    mock_exec.stream.assert_not_called()
+    mock_exec.watch_logs.assert_not_called()
 
 
 def test_watch_handles_keyboard_interrupt(runner):
-    result, mock_exec = _invoke(runner, ["--watch"], side_effect=KeyboardInterrupt)
+    # KeyboardInterrupt is handled inside Executor.watch_logs; command exits cleanly
+    result, mock_exec = _invoke(runner, ["--watch"])
 
     assert result.exit_code == 0
-    mock_exec.stream.assert_called_once()
+    mock_exec.watch_logs.assert_called_once()

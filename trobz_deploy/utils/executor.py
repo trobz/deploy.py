@@ -108,6 +108,35 @@ class Executor:
 
         return result.stdout.strip()
 
+    def watch_logs(self, instance_name: str) -> None:
+        """Stream journalctl logs for *instance_name*, merged with the Odoo logfile if found.
+
+        Reads ``config/odoo.conf`` under the instance home directory to locate
+        ``logfile``.  When present, both streams are tailed concurrently.
+        """
+        typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+
+        log_file: str | None = None
+        try:
+            home_dir = self.capture("echo $HOME")
+            conf = f"{home_dir}/{instance_name}/config/odoo.conf"
+            raw = self.capture(f"grep -E '^logfile' {conf} | cut -d= -f2 | tr -d ' ' || true")
+            candidate = (raw or "").strip()
+            if candidate and candidate.lower() not in ("false", "none"):
+                log_file = candidate
+        except ExecutorError:
+            pass
+
+        try:
+            if log_file:
+                typer.secho(f"Merging with Odoo log: {log_file}", fg="cyan")
+                cmd = f"( journalctl --user -u {instance_name} -f & tail -f {log_file} & wait )"
+            else:
+                cmd = f"journalctl --user -u {instance_name} -f"
+            self.stream(cmd)
+        except KeyboardInterrupt:
+            typer.echo()
+
     def stream(self, command: str, cwd: str | None = None) -> None:
         """Run a long-lived streaming command (e.g. journalctl -f).
 
