@@ -108,6 +108,11 @@ class Executor:
 
         return result.stdout.strip()
 
+    @staticmethod
+    def _colorize(command: str, ansi_code: str) -> str:
+        """Pipe *command*'s output through ``sed``, wrapping each line in an ANSI color."""
+        return f'{command} | stdbuf -oL sed "s/.*/\x1b[{ansi_code}m&\x1b[0m/"'
+
     def watch_logs(self, eff_type: str, instance_name: str) -> None:
         """Stream journalctl logs for *instance_name*, merged with Odoo log files if found.
 
@@ -143,17 +148,18 @@ class Executor:
                 except ExecutorError:
                     pass
 
-        journalctl_cmd = f"journalctl --user -u {instance_name} -f -o short-iso"
-        tails: list[str] = []
+        streams: list[str] = [
+            self._colorize(f"journalctl --user -u {instance_name} -f -o short-iso", "36")  # cyan
+        ]
         if log_file:
             typer.secho(f"Merging with Odoo log: {log_file}", fg="cyan")
-            tails.append(f"tail -f {log_file}")
+            streams.append(self._colorize(f"tail -f {log_file}", "32"))  # green
         if upgrade_log_file:
             typer.secho(f"Merging with upgrade log: {upgrade_log_file}", fg="cyan")
-            tails.append(f"tail -f {upgrade_log_file}")
+            streams.append(self._colorize(f"tail -f {upgrade_log_file}", "33"))  # yellow
 
         try:
-            cmd = f"( {' & '.join([journalctl_cmd, *tails])} & wait )" if tails else journalctl_cmd
+            cmd = f"( {' & '.join(streams)} & wait )" if len(streams) > 1 else streams[0]
             self.stream(cmd)
         except KeyboardInterrupt:
             typer.echo()
