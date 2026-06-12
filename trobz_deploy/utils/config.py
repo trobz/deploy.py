@@ -118,3 +118,20 @@ def resolve_options(
         resolved["db"] = instance_name
 
     return resolved
+
+
+def parse_step_option(value: str | None) -> list[str]:
+    """Split a comma-separated option value into a list of trimmed, non-empty slugs."""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def validate_step_slugs(option_name: str, slugs: list[str], valid_steps: dict[str, str], *, allow_all: bool) -> None:
+    """Raise ValueError if any of *slugs* is not in *valid_steps* (or 'all' when allowed)."""
+    valid = {*valid_steps, "all"} if allow_all else set(valid_steps)
+    invalid = sorted(set(slugs) - valid)
+    if invalid:
+        choices = ", ".join((*valid_steps, "all") if allow_all else valid_steps)
+        msg = f"Invalid {option_name} value(s): {', '.join(invalid)}. Available steps: {choices}"
+        raise ValueError(msg)

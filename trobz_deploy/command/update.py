@@ -5,9 +5,15 @@ from typing import Annotated
 import typer
 
 from trobz_deploy.utils.addons import get_addons_path
-from trobz_deploy.utils.config import DeployType, load_config, resolve_options
+from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
 from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.venv import setup_python_deps, upgrade_package
+
+UPDATE_STEPS = {
+    "pull": "Pulling latest code",
+    "venv": "Updating dependencies in venv",
+    "db": "Updating database(s)",
+}
 
 
 def update(  # noqa: C901
@@ -38,8 +44,34 @@ def update(  # noqa: C901
         bool,
         typer.Option("--watch", help="Stream service logs with journalctl after a successful update."),
     ] = False,
+    steps: Annotated[
+        str,
+        typer.Option(
+            "--steps",
+            help=f"Comma-separated steps to run, or 'all'. Available: {', '.join(UPDATE_STEPS.keys())}.",
+        ),
+    ] = "all",
+    skip_steps: Annotated[
+        str | None,
+        typer.Option(
+            "--except",
+            help=f"Comma-separated steps to skip. Available: {', '.join(UPDATE_STEPS.keys())}.",
+        ),
+    ] = None,
 ) -> None:
     """Update an existing deployment instance."""
+    eff_steps = parse_step_option(steps)
+    eff_skip_steps = parse_step_option(skip_steps)
+    try:
+        validate_step_slugs("--steps", eff_steps, UPDATE_STEPS, allow_all=True)
+        validate_step_slugs("--except", eff_skip_steps, UPDATE_STEPS, allow_all=False)
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
+    def _run_step(slug: str) -> bool:
+        return ("all" in eff_steps or slug in eff_steps) and slug not in eff_skip_steps
+
     cfg = load_config(ctx.obj["config"], instance_name)
     try:
         opts = resolve_options(
@@ -106,65 +138,68 @@ def update(  # noqa: C901
     # Step 5+6: Pull/upgrade code and update dependencies
     if eff_type == "python" and eff_requirements:
         # Package mode: upgrade pip package directly, no git pull
-        typer.secho("\nUpgrading package…", fg="green")
-        try:
-            upgrade_package(executor, instance_path, eff_requirements)
-        except ExecutorError as exc:
-            run_hooks("post-update")
-            run_hooks("post-update-fail")
-            typer.echo(typer.style(f"Package upgrade failed: {exc}", fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
+        if _run_step("venv"):
+            typer.secho(f"\n{UPDATE_STEPS['venv']}…", fg="green")
+            try:
+                upgrade_package(executor, instance_path, eff_requirements)
+            except ExecutorError as exc:
+                run_hooks("post-update")
+                run_hooks("post-update-fail")
+                typer.echo(typer.style(f"Package upgrade failed: {exc}", fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
     elif eff_type == "service" and not opts.get("repo_url"):
         # Binary/system service mode: no repo to pull, skip straight to restart
-        typer.secho("\nNo repository to update, skipping pull…", fg="yellow")
+        if _run_step("pull"):
+            typer.secho("\nNo repository to update, skipping pull…", fg="yellow")
     else:
-        # Repo mode: git pull then update deps
-        try:
-            executor.run(f"test -d {instance_path}/.git")
-        except ExecutorError:
-            msg = f"Instance directory not found or not a git repo: ~/{instance_name}"
-            typer.echo(typer.style(msg, fg="red"), err=True)
-            raise typer.Exit(code=1) from None
+        # Repo mode: git pull then update venv
+        if _run_step("pull"):
+            try:
+                executor.run(f"test -d {instance_path}/.git")
+            except ExecutorError:
+                msg = f"Instance directory not found or not a git repo: ~/{instance_name}"
+                typer.echo(typer.style(msg, fg="red"), err=True)
+                raise typer.Exit(code=1) from None
 
-        typer.secho("\nPulling latest code…", fg="green")
-        try:
-            if eff_repo_branch:
-                executor.run(
-                    f"git fetch origin && git checkout {eff_repo_branch} && git pull --recurse-submodules",
-                    cwd=instance_path,
-                )
-            else:
-                executor.run("git pull --recurse-submodules", cwd=instance_path)
-        except ExecutorError as exc:
-            run_hooks("post-update")
-            run_hooks("post-update-fail")
-            typer.echo(typer.style(f"git pull failed: {exc}", fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
+            typer.secho(f"\n{UPDATE_STEPS['pull']}…", fg="green")
+            try:
+                if eff_repo_branch:
+                    executor.run(
+                        f"git fetch origin && git checkout {eff_repo_branch} && git pull --recurse-submodules",
+                        cwd=instance_path,
+                    )
+                else:
+                    executor.run("git pull --recurse-submodules", cwd=instance_path)
+            except ExecutorError as exc:
+                run_hooks("post-update")
+                run_hooks("post-update-fail")
+                typer.echo(typer.style(f"git pull failed: {exc}", fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
 
-        typer.secho("\nUpdating dependencies…", fg="green")
-        try:
-            if eff_type == "odoo":
-                executor.run(
-                    "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
-                    cwd=instance_path,
-                )
-                executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
-            elif eff_type == "python":
-                setup_python_deps(executor, service_path)
-            else:  # service
-                build_cmd: str | None = opts.get("build")
-                if build_cmd:
-                    executor.run(build_cmd, cwd=service_path)
-        except ExecutorError as exc:
-            run_hooks("post-update")
-            run_hooks("post-update-fail")
-            typer.echo(typer.style(f"Dependency update failed: {exc}", fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
+        if _run_step("venv"):
+            typer.secho(f"\n{UPDATE_STEPS['venv']}…", fg="green")
+            try:
+                if eff_type == "odoo":
+                    executor.run(
+                        "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
+                        cwd=instance_path,
+                    )
+                    executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
+                elif eff_type == "python":
+                    setup_python_deps(executor, service_path)
+                else:  # service
+                    build_cmd: str | None = opts.get("build")
+                    if build_cmd:
+                        executor.run(build_cmd, cwd=service_path)
+            except ExecutorError as exc:
+                run_hooks("post-update")
+                run_hooks("post-update-fail")
+                typer.echo(typer.style(f"Dependency update failed: {exc}", fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
 
-    # Step 7: Apply changes
-    typer.secho("\nApplying changes…", fg="green")
-    try:
-        if eff_type == "odoo":
+    # Step 7: Update database (Odoo only)
+    if eff_type == "odoo" and _run_step("db"):
+        try:
             addons_path = get_addons_path(executor, instance_path)
             for db in eff_db:
                 typer.secho(f"\nUpdating database {db!r}…", fg="green")
@@ -173,11 +208,20 @@ def update(  # noqa: C901
                     f" --addons-path={addons_path} --logfile log/upgrade.log",
                     cwd=instance_path,
                 )
+        except ExecutorError as exc:
+            run_hooks("post-update")
+            run_hooks("post-update-fail")
+            typer.echo(typer.style(f"Database update failed: {exc}", fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
+
+    # Step 8: Restart service to apply changes
+    typer.secho("\nApplying changes…", fg="green")
+    try:
         executor.run(f"systemctl --user restart {instance_name}")
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
-        typer.echo(typer.style(f"Restart/upgrade failed: {exc}", fg="red"), err=True)
+        typer.echo(typer.style(f"Restart failed: {exc}", fg="red"), err=True)
         raise typer.Exit(code=1) from exc
 
     # Step 8: post-update hooks
