@@ -30,7 +30,7 @@ def _executor_mock_fresh_dir():
     """Executor mock where the instance directory/repo does not exist yet."""
     mock = _executor_mock()
 
-    def run_side_effect(cmd, cwd=None, check=True):
+    def run_side_effect(cmd, cwd=None, check=True, dry_run=False):
         if cmd.startswith("test -d"):
             msg = "not found"
             raise ExecutorError(msg)
@@ -65,6 +65,10 @@ def _invoke(
 
 def _run_commands(mock_exec) -> list[str]:
     return [call.args[0] for call in mock_exec.run.call_args_list]
+
+
+def _run_calls(mock_exec) -> list[tuple[str, dict]]:
+    return [(call.args[0], call.kwargs) for call in mock_exec.run.call_args_list]
 
 
 def test_invalid_step_value_exits_with_error(runner):
@@ -203,3 +207,50 @@ def test_step_all_runs_every_step_for_service(runner):
     assert any("make build" in cmd for cmd in commands)
     mock_exec.write_file.assert_called_once()
     assert any("systemctl --user enable --now" in cmd for cmd in commands)
+
+
+def test_dry_run_marks_writing_commands_and_skips_postgres_creation(runner):
+    cfg = {"repo_url": "git@example.com:org/myapp.git"}
+
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "all", "--dry-run"],
+        cfg=cfg,
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    assert "Dry run complete" in result.output
+    assert "[dry-run] Would create Postgres user" in result.output
+
+    calls = _run_calls(mock_exec)
+    clone_call = next(c for c in calls if "git clone" in c[0])
+    assert clone_call[1].get("dry_run") is True
+
+    # The Postgres role doesn't exist (mock capture returns ""), but in
+    # dry-run mode no createuser/ALTER ROLE command should be issued.
+    assert not any(cmd.startswith("createuser") for cmd, _ in calls)
+
+    # Read-only existence checks are not marked as dry-run skips.
+    check_calls = [c for c in calls if c[0].startswith("test -d")]
+    assert check_calls
+    assert all(not kwargs.get("dry_run") for _, kwargs in check_calls)
+
+    _, write_kwargs = mock_exec.write_file.call_args
+    assert write_kwargs.get("dry_run") is True
+
+
+def test_dry_run_step_set_up_instance_dir_marks_mkdir(runner):
+    result, mock_exec = _invoke(
+        runner,
+        "service-myapp-production",
+        "service",
+        ["--steps", "dir", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    calls = _run_calls(mock_exec)
+    mkdir_call = next(c for c in calls if "mkdir -p" in c[0])
+    assert mkdir_call[1].get("dry_run") is True

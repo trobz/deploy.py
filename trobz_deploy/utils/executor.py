@@ -41,17 +41,23 @@ class Executor:
             return argv
         return command
 
-    def run(self, command: str, cwd: str | None = None, check: bool = True) -> str:
+    def run(self, command: str, cwd: str | None = None, check: bool = True, dry_run: bool = False) -> str:
         """Run a command, streaming output in verbose mode.
 
         Args:
             command: Shell command to execute.
             cwd: Working directory (embedded in remote command; passed to local subprocess).
             check: Raise ExecutorError if the command exits non-zero.
+            dry_run: If True, print what would run instead of executing it.
 
         Returns:
-            Combined stdout (empty string when verbose, since output is streamed).
+            Combined stdout (empty string when verbose or dry-run, since output is streamed).
         """
+        if dry_run:
+            display = f"cd {cwd} && {command}" if cwd else command
+            typer.secho(f"[dry-run] $ {display}", fg="cyan")
+            return ""
+
         argv = self._build_argv(command, cwd)
         is_remote = isinstance(argv, list)
 
@@ -177,12 +183,17 @@ class Executor:
             typer.echo(f"$ {display}", err=True)
         subprocess.run(argv, shell=not is_remote, cwd=cwd if not is_remote else None)  # noqa: S603
 
-    def write_file(self, content: str, remote_path: str) -> None:
+    def write_file(self, content: str, remote_path: str, dry_run: bool = False) -> None:
         """Write *content* to *remote_path* on the target host.
 
         Base64-encodes the content so that any special characters are safe
         to pass through the SSH command line.
         """
+        if dry_run:
+            typer.secho(f"[dry-run] would write {remote_path}:", fg="cyan")
+            typer.echo(content)
+            return
+
         b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
         if self.verbose:
             typer.echo(f"Writing to {remote_path}\n{content}")

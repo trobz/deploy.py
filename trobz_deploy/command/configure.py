@@ -27,9 +27,13 @@ def _postgres_user_exists(executor: Executor, instance_name: str) -> bool:
     return result.strip() == "1"
 
 
-def _ensure_postgres_user(executor: Executor, instance_name: str) -> None:
+def _ensure_postgres_user(executor: Executor, instance_name: str, dry_run: bool = False) -> None:
     """Create a Postgres superuser role named after the instance, if it doesn't already exist."""
     if _postgres_user_exists(executor, instance_name):
+        return
+
+    if dry_run:
+        typer.secho(f"\n[dry-run] Would create Postgres user {instance_name!r}…", fg="cyan")
         return
 
     typer.secho(f"\nCreating Postgres user {instance_name!r}…", fg="green")
@@ -94,6 +98,13 @@ def configure(  # noqa: C901
             help=f"Comma-separated steps to skip. Available: {', '.join(CONFIGURE_STEPS.keys())}.",
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Go through all steps without running any writing/destructive commands.",
+        ),
+    ] = False,
 ) -> None:
     """Configure a new deployment instance."""
     eff_steps = parse_step_option(steps)
@@ -137,6 +148,9 @@ def configure(  # noqa: C901
         typer.echo(typer.style(msg, fg="red"), err=True)
         raise typer.Exit(code=1)
 
+    if dry_run:
+        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
+
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
@@ -154,11 +168,11 @@ def configure(  # noqa: C901
                 raise typer.Exit(code=1)
             except ExecutorError:
                 typer.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
-                executor.run(f"mkdir -p {instance_path}")
+                executor.run(f"mkdir -p {instance_path}", dry_run=dry_run)
         elif eff_type == "service" and not eff_repo_url:
             # Binary/system service mode: no repo, just ensure a working directory exists
             typer.secho(f"\nCreating instance directory ~/{instance_name}…", fg="green")
-            executor.run(f"mkdir -p {instance_path}")
+            executor.run(f"mkdir -p {instance_path}", dry_run=dry_run)
         else:
             if not eff_repo_url:
                 msg = "repo_url is required. Provide it as an argument or set it in deploy.yml."
@@ -176,7 +190,7 @@ def configure(  # noqa: C901
                 clone_cmd = f"git clone --recurse-submodules {eff_repo_url} $HOME/{instance_name}"
                 if eff_repo_branch:
                     clone_cmd += f" --branch {eff_repo_branch}"
-                executor.run(clone_cmd)
+                executor.run(clone_cmd, dry_run=dry_run)
             except ExecutorError as exc:
                 typer.echo(typer.style(f"Git clone failed: {exc}", fg="red"), err=True)
                 raise typer.Exit(code=1) from exc
@@ -186,12 +200,13 @@ def configure(  # noqa: C901
         executor.run(
             "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
             cwd=instance_path,
+            dry_run=dry_run,
         )
 
     # Step 3b: Ensure Postgres role exists
     if eff_type == "odoo" and _run_step("pg"):
         try:
-            _ensure_postgres_user(executor, instance_name)
+            _ensure_postgres_user(executor, instance_name, dry_run=dry_run)
         except ExecutorError as exc:
             typer.echo(typer.style(str(exc), fg="red"), err=True)
             raise typer.Exit(code=1) from exc
@@ -201,20 +216,21 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(executor, instance_path)
+                setup_odoo_venv(executor, instance_path, dry_run=dry_run)
             elif eff_type == "python":
                 if eff_requirements:
-                    setup_package_venv(executor, instance_path, eff_requirements)
+                    setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
                 else:
-                    setup_python_venv(executor, service_path)
+                    setup_python_venv(executor, service_path, dry_run=dry_run)
                     executor.run(
                         "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
                         cwd=service_path,
+                        dry_run=dry_run,
                     )
             else:  # service
                 build_cmd: str | None = opts.get("build")
                 if build_cmd:
-                    executor.run(build_cmd, cwd=service_path)
+                    executor.run(build_cmd, cwd=service_path, dry_run=dry_run)
         except ExecutorError as exc:
             typer.echo(typer.style(str(exc), fg="red"), err=True)
             raise typer.Exit(code=1) from exc
@@ -259,16 +275,22 @@ def configure(  # noqa: C901
         unit_dir = "$HOME/.config/systemd/user"
         unit_path = f"{unit_dir}/{instance_name}.service"
         try:
-            executor.run(f"mkdir -p {unit_dir}")
-            executor.write_file(unit_content, unit_path)
-            executor.run("loginctl enable-linger")
-            executor.run("systemctl --user daemon-reload")
-            executor.run(f"systemctl --user enable --now {instance_name}")
+            executor.run(f"mkdir -p {unit_dir}", dry_run=dry_run)
+            executor.write_file(unit_content, unit_path, dry_run=dry_run)
+            executor.run("loginctl enable-linger", dry_run=dry_run)
+            executor.run("systemctl --user daemon-reload", dry_run=dry_run)
+            executor.run(f"systemctl --user enable --now {instance_name}", dry_run=dry_run)
         except ExecutorError as exc:
             typer.echo(typer.style(str(exc), fg="red"), err=True)
             raise typer.Exit(code=1) from exc
 
-    typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
+    if dry_run:
+        typer.secho(f"\nDry run complete: instance {instance_name!r} was not changed.", fg="green")
+    else:
+        typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
 
     if watch:
-        executor.watch_logs(eff_type, instance_name)
+        if dry_run:
+            typer.secho("Skipping --watch: no service was started in dry-run mode.", fg="yellow")
+        else:
+            executor.watch_logs(eff_type, instance_name)

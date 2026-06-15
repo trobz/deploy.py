@@ -61,6 +61,7 @@ $ deploy configure [OPTIONS] INSTANCE_NAME [SSH_HOST] [REPO_URL]
 * `--watch`: Stream service logs with journalctl after a successful configure. Also merge with odoo and click-odoo-update logs if applicable.
 * `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: dir, pg, gitaggregate, venv, unit.  \[default: all\]
 * `--except TEXT`: Comma-separated steps to skip. Available: dir, pg, gitaggregate, venv, unit.
+* `--dry-run`: Go through all steps without running any writing/destructive commands.
 * `--help`: Show this message and exit.
 
 ## `deploy update`
@@ -93,6 +94,7 @@ $ deploy update [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `--ignore-core-addons`: Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons are not updated. This is normally safe, due the Odoo stable policy.
 * `--update-all`: Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).
 * `-m, --modules TEXT`: Comma-separated list of modules to update by running Odoo directly (-u MODULES --stop-after-init), skipping click-odoo-update.
+* `--dry-run`: Go through all steps without running any writing/destructive commands.
 * `--help`: Show this message and exit.
 
 ## `deploy restart`

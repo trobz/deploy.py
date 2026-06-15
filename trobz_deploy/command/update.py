@@ -101,6 +101,13 @@ def update(  # noqa: C901
             ),
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Go through all steps without running any writing/destructive commands.",
+        ),
+    ] = False,
 ) -> None:
     """Update an existing deployment instance."""
     eff_steps = parse_step_option(steps)
@@ -142,6 +149,9 @@ def update(  # noqa: C901
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
     hooks: dict = opts.get("hooks", {})
 
+    if dry_run:
+        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
+
     executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
@@ -154,7 +164,7 @@ def update(  # noqa: C901
             return True
         for cmd in hooks.get(hook_name, []):
             try:
-                executor.run(cmd, cwd=instance_path)
+                executor.run(cmd, cwd=instance_path, dry_run=dry_run)
             except ExecutorError as exc:
                 typer.echo(
                     typer.style(f"Hook {hook_name!r} failed: {exc}", fg="red"),
@@ -184,7 +194,7 @@ def update(  # noqa: C901
         if _run_step("venv"):
             typer.secho(f"\n{UPDATE_STEPS['venv']}…", fg="green")
             try:
-                upgrade_package(executor, instance_path, eff_requirements)
+                upgrade_package(executor, instance_path, eff_requirements, dry_run=dry_run)
             except ExecutorError as exc:
                 run_hooks("post-update")
                 run_hooks("post-update-fail")
@@ -210,9 +220,10 @@ def update(  # noqa: C901
                     executor.run(
                         f"git fetch origin && git checkout {eff_repo_branch} && git pull --recurse-submodules",
                         cwd=instance_path,
+                        dry_run=dry_run,
                     )
                 else:
-                    executor.run("git pull --recurse-submodules", cwd=instance_path)
+                    executor.run("git pull --recurse-submodules", cwd=instance_path, dry_run=dry_run)
             except ExecutorError as exc:
                 run_hooks("post-update")
                 run_hooks("post-update-fail")
@@ -226,14 +237,15 @@ def update(  # noqa: C901
                     executor.run(
                         "if [ -f addons/repos.yaml ]; then cd addons/ && gitaggregate -c repos.yaml; fi",
                         cwd=instance_path,
+                        dry_run=dry_run,
                     )
-                    executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path)
+                    executor.run("odoo-venv update .venv --backup --yes", cwd=instance_path, dry_run=dry_run)
                 elif eff_type == "python":
-                    setup_python_deps(executor, service_path)
+                    setup_python_deps(executor, service_path, dry_run=dry_run)
                 else:  # service
                     build_cmd: str | None = opts.get("build")
                     if build_cmd:
-                        executor.run(build_cmd, cwd=service_path)
+                        executor.run(build_cmd, cwd=service_path, dry_run=dry_run)
             except ExecutorError as exc:
                 run_hooks("post-update")
                 run_hooks("post-update-fail")
@@ -258,6 +270,7 @@ def update(  # noqa: C901
                         f".venv/bin/click-odoo-update --config config/odoo.conf -d {db}"
                         f" --addons-path={addons_path} --logfile log/upgrade.log{extra_args}",
                         cwd=instance_path,
+                        dry_run=dry_run,
                     )
             else:
                 odoo_version = get_odoo_version(executor, instance_path)
@@ -269,6 +282,7 @@ def update(  # noqa: C901
                         f" --addons-path={addons_path} --logfile log/upgrade.log"
                         f" --stop-after-init {no_server_wide_flag}",
                         cwd=instance_path,
+                        dry_run=dry_run,
                     )
         except ExecutorError as exc:
             run_hooks("post-update")
@@ -279,7 +293,7 @@ def update(  # noqa: C901
     # Step 8: Restart service to apply changes
     typer.secho("\nApplying changes…", fg="green")
     try:
-        executor.run(f"systemctl --user restart {instance_name}")
+        executor.run(f"systemctl --user restart {instance_name}", dry_run=dry_run)
     except ExecutorError as exc:
         run_hooks("post-update")
         run_hooks("post-update-fail")
@@ -290,7 +304,13 @@ def update(  # noqa: C901
     run_hooks("post-update")
     run_hooks("post-update-success")
 
-    typer.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
+    if dry_run:
+        typer.secho(f"\nDry run complete: instance {instance_name!r} was not updated.", fg="green")
+    else:
+        typer.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
 
     if watch:
-        executor.watch_logs(eff_type, instance_name)
+        if dry_run:
+            typer.secho("Skipping --watch: no service was restarted in dry-run mode.", fg="yellow")
+        else:
+            executor.watch_logs(eff_type, instance_name)

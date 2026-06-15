@@ -112,6 +112,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 | `--watch`      | `False`  | Stream service logs with journalctl after a successful configure, merge with odoo log and click-odoo-update log if applicable |
 | `--steps`      | `all`    | Comma-separated steps to run, or `all`. See **Steps** below for available slugs                    |
 | `--except`     | `None`   | Comma-separated steps to skip (cannot be `all`). See **Steps** below for available slugs           |
+| `--dry-run`    | `False`  | Go through all steps, printing what would run, without executing any writing/destructive commands |
 
 **Steps (executed in order)**
 
@@ -196,6 +197,16 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 
 If `--watch` is set, stream `journalctl` for the unit and merge with odoo log and click-odoo-update log if applicable after a successful run.
 
+**`--dry-run`**
+
+Runs through the selected steps as normal — including read-only checks (e.g. whether the
+instance directory or a `.venv` already exists, whether a Postgres role exists) — but every
+writing/destructive command (`mkdir`, `git clone`, `gitaggregate`, `createuser`/`ALTER ROLE`,
+`odoo-venv create`, `uv venv`/`uv pip install`, the `build` command, writing the systemd unit
+file, `loginctl enable-linger`, `systemctl --user daemon-reload`/`enable --now`) is printed
+(prefixed with `[dry-run] $`) instead of being executed. `--watch` is ignored in dry-run mode
+since no service is started.
+
 **Exit conditions**
 
 | Condition                                    | Exit code |
@@ -239,6 +250,7 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--ty
 | `--watch`          | `False`           | Stream service logs with journalctl after a successful configure, merge with odoo log and click-odoo-update log if applicable |
 | `--steps`          | `all`             | Comma-separated steps to run, or `all`. See **Steps** below for available slugs |
 | `--except`         | `None`            | Comma-separated steps to skip (cannot be `all`). See **Steps** below for available slugs |
+| `--dry-run`        | `False`           | Go through all steps, printing what would run, without executing any writing/destructive commands |
 
 **Hooks**
 
@@ -343,6 +355,15 @@ and 8–9 always run regardless of `--steps`/`--except`.
    whether step 8 succeeded.
 
 If `--watch` is set, stream `journalctl` for the unit and merge with odoo log and click-odoo-update log if applicable after a successful run.
+
+**`--dry-run`**
+
+Runs through the selected steps as normal — including read-only checks (e.g. whether
+`~/<instance_name>` is a Git repository) — but every writing/destructive command (hook
+commands, `git pull`/`git fetch`/`git checkout`, `gitaggregate`, `odoo-venv update`,
+`uv pip install`/`uv sync`, the `build` command, `click-odoo-update`,
+`systemctl --user restart`) is printed (prefixed with `[dry-run] $`) instead of being
+executed. `--watch` is ignored in dry-run mode since the service is not restarted.
 
 **Exit conditions**
 
