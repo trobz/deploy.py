@@ -22,6 +22,7 @@ $ deploy [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `-V, --version`: Display the trobz-deploy version.
 * `--config FILE`: Path to the configuration file.  \[default: deploy.yml\]
 * `--verbose`: Print each remote command and its output as it runs.
 * `--install-completion`: Install completion for the current shell.
@@ -88,6 +89,10 @@ $ deploy update [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `--watch`: Stream service logs with journalctl after a successful update. Also merge with odoo and click-odoo-update logs if applicable.
 * `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: pull, venv, db.  \[default: all\]
 * `--except TEXT`: Comma-separated steps to skip. Available: pull, venv, db.
+* `--ignore-addons TEXT`: Comma-separated list of addons to ignore. These will not be updated if their checksum has changed. Use with care. Passed to click-odoo-update --ignore-addons.
+* `--ignore-core-addons`: Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons are not updated. This is normally safe, due the Odoo stable policy.
+* `--update-all`: Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).
+* `-m, --modules TEXT`: Comma-separated list of modules to update by running Odoo directly (-u MODULES --stop-after-init), skipping click-odoo-update.
 * `--help`: Show this message and exit.
 
 ## `deploy restart`

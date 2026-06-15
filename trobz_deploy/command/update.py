@@ -7,7 +7,7 @@ import typer
 from trobz_deploy.utils.addons import get_addons_path
 from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
 from trobz_deploy.utils.executor import Executor, ExecutorError
-from trobz_deploy.utils.venv import setup_python_deps, upgrade_package
+from trobz_deploy.utils.venv import get_odoo_version, setup_python_deps, upgrade_package
 
 UPDATE_STEPS = {
     "pull": "Pulling latest code",
@@ -62,6 +62,43 @@ def update(  # noqa: C901
         typer.Option(
             "--except",
             help=f"Comma-separated steps to skip. Available: {', '.join(UPDATE_STEPS.keys())}.",
+        ),
+    ] = None,
+    ignore_addons: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Comma-separated list of addons to ignore. These will not be updated if their checksum has changed. "
+                "Use with care. Passed to click-odoo-update --ignore-addons."
+            ),
+        ),
+    ] = None,
+    ignore_core_addons: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-core-addons",
+            help=(
+                "Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons "
+                "are not updated. This is normally safe, due the Odoo stable policy."
+            ),
+        ),
+    ] = False,
+    update_all: Annotated[
+        bool,
+        typer.Option(
+            "--update-all",
+            help="Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).",
+        ),
+    ] = False,
+    modules: Annotated[
+        str | None,
+        typer.Option(
+            "-m",
+            "--modules",
+            help=(
+                "Comma-separated list of modules to update by running Odoo directly "
+                "(-u MODULES --stop-after-init), skipping click-odoo-update."
+            ),
         ),
     ] = None,
 ) -> None:
@@ -207,13 +244,32 @@ def update(  # noqa: C901
     if eff_type == "odoo" and _run_step("db"):
         try:
             addons_path = get_addons_path(executor, instance_path)
-            for db in eff_db:
-                typer.secho(f"\nUpdating database {db!r}…", fg="green")
-                executor.run(
-                    f".venv/bin/click-odoo-update --config config/odoo.conf -d {db}"
-                    f" --addons-path={addons_path} --logfile log/upgrade.log",
-                    cwd=instance_path,
-                )
+            if not modules:
+                extra_args = ""
+                if ignore_addons:
+                    extra_args += f" --ignore-addons {ignore_addons}"
+                if ignore_core_addons:
+                    extra_args += " --ignore-core-addons"
+                if update_all:
+                    extra_args += " --update-all"
+                for db in eff_db:
+                    typer.secho(f"\nUpdating database {db!r}…", fg="green")
+                    executor.run(
+                        f".venv/bin/click-odoo-update --config config/odoo.conf -d {db}"
+                        f" --addons-path={addons_path} --logfile log/upgrade.log{extra_args}",
+                        cwd=instance_path,
+                    )
+            else:
+                odoo_version = get_odoo_version(executor, instance_path)
+                no_server_wide_flag = "--no-http" if float(odoo_version) >= 11.0 else "--no-xmlrpc"
+                for db in eff_db:
+                    typer.secho(f"\nUpdating modules {modules!r} on database {db!r}…", fg="green")
+                    executor.run(
+                        f".venv/bin/odoo -u {modules} --config config/odoo.conf -d {db}"
+                        f" --addons-path={addons_path} --logfile log/upgrade.log"
+                        f" --stop-after-init {no_server_wide_flag}",
+                        cwd=instance_path,
+                    )
         except ExecutorError as exc:
             run_hooks("post-update")
             run_hooks("post-update-fail")
