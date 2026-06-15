@@ -73,6 +73,7 @@ These options are accepted by all commands:
 
 | Option        | Default        | Description                                                    |
 |---------------|----------------|----------------------------------------------------------------|
+| `--version`   | `None`         | Print current version and exit                                |
 | `--config`    | `deploy.yml`   | Path to the configuration file (resolved locally)             |
 | `--verbose`   | `False`        | Print each remote command and its output as it runs           |
 
@@ -89,7 +90,7 @@ file values, which take precedence over built-in defaults.
 **Signature**
 
 ```bash
-deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service] [-p <ssh_port>] [--force] [--repo-subdir <subdir>]
+deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--type odoo|python|service] [-p <ssh_port>] [--repo-subdir <subdir>]
 ```
 
 **Arguments**
@@ -106,37 +107,77 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 |----------------|----------|-----------------------------------------------------------------------------------------------------|
 | `--type`       | auto     | Deployment type: `odoo`, `python`, or `service`; auto-detected from instance name prefix if omitted |
 | `-p`           | `22`     | SSH port, default 22                                                                                |
-| `--force`      | `False`  | Re-run steps 3–4 even if the instance directory already exists                                      |
 | `--repo-subdir`| `None`   | Subdirectory within the repository to work on, if any                                               |
+| `--repo-branch`| `None`   | Git branch to clone and track (defaults to the repository's default branch)                        |
+| `--watch`      | `False`  | Stream service logs with journalctl after a successful configure, merge with odoo log and click-odoo-update log if applicable |
+| `--steps`      | `all`    | Comma-separated steps to run, or `all`. See **Steps** below for available slugs                    |
+| `--except`     | `None`   | Comma-separated steps to skip (cannot be `all`). See **Steps** below for available slugs           |
 
 **Steps (executed in order)**
+
+Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**. `--steps` (default
+`all`) selects which of these steps run; `--except` removes steps from that selection. Step 1
+(connecting) always runs regardless of `--steps`/`--except`.
 
 1. **Connect** — if `ssh_host` is set and is not `localhost`, open an SSH connection.
    Otherwise all subsequent commands run as local subprocesses.
 
-2. **Clone repository** — clone `repo_url` into `~/<instance_name>` on the target host.
-   - If the directory already exists and is a valid Git repository:
-     - Without `--force`: abort with an error and a hint to use `--force` or a different name.
-     - With `--force`: skip the clone, proceed to steps 3–4.
+2. **`set-up-instance-dir`** — set up `~/<instance_name>` on the target host:
+   - **`python` with `requirements`** (package mode): create the directory with `mkdir -p`.
+     If it already exists, abort with an error and a hint to use `--except dir` to skip this
+     step and reuse the existing directory.
+   - **`service` without `repo_url`**: create the directory with `mkdir -p`.
+   - **otherwise** (repo mode — `odoo`, `python` without `requirements`, or `service` with
+     `repo_url`): clone `repo_url` into `~/<instance_name>` (`git clone --recurse-submodules`,
+     optionally with `--branch <repo_branch>`).
+     - If the directory already exists and is a valid Git repository, abort with an error and a
+       hint to use `--except dir` to skip the clone and proceed to step 3.
 
-3. **Set up the application environment**
+3. **`run-gitaggregate`** (`odoo` only) — if `addons/repos.yaml` exists, change to `addons/` and
+   run `gitaggregate -c repos.yaml`.
 
-   - **`odoo`**: create a virtual environment using `odoo-venv`:
+4. **`ensure-postgres-role`** (`odoo` only) — check whether a Postgres role named
+   `<instance_name>` already exists:
+   ```bash
+   psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='<instance_name>'" -d postgres
+   ```
+   - If it exists, do nothing.
+   - If it does not exist, create it as a superuser role and set a strong, randomly generated
+     password:
      ```bash
-     odoo-venv --project-dir ~/<instance_name>
+     createuser --no-createrole --superuser <instance_name>
+     psql -d postgres -c "ALTER ROLE \"<instance_name>\" WITH PASSWORD '<generated>'"
      ```
-     After creation, run `odoo-addons-path` to detect and record the add-on directories.
-   - **`python`**: create a virtual environment and install dependencies using `uv`:
+     The generated password is printed once to the console and is not stored anywhere by `deploy`.
+
+5. **`set-up-environment`** — set up the application environment:
+
+   - **`odoo`**: create if not present a virtual environment using `odoo-venv`:
+     ```bash
+     odoo-venv create --project-dir ~/<instance_name> --preset project
+     ```
+   - **`python` with `requirements`** (package mode): create a venv and install the listed
+     packages directly:
+     ```bash
+     uv venv .venv
+     uv pip install <requirements...>
+     ```
+   - **`python` without `requirements`** (repo mode): create a venv and install dependencies
+     using `uv`:
      ```bash
      uv venv .venv
      if [ -e requirements.txt ]; then uv pip install -r requirements.txt; fi
      if [ -e pyproject.toml ]; then uv sync; fi
      ```
+     If `.env.example` exists and `.env` does not, copy it to `.env`.
    - **`service`**: run the `build` command defined in the local `deploy.yml`
      (e.g. `npm ci && npm run build`, `cargo build --release`), executed remotely on the target
-     host. No Python venv is created.
+     host, if any. No Python venv is created.
 
-4. **Install systemd user unit** — render the appropriate bundled template, write the unit file,
+   For `odoo` and `python`, if `.venv` already exists it is reused instead of being recreated;
+   use `--except venv` to skip this step entirely.
+
+6. **`install-systemd-unit`** — render the appropriate bundled template, write the unit file,
    and register it with the user-level systemd instance (no `sudo` required).
 
    - Unit file destination: `~/.config/systemd/user/<instance_name>.service`
@@ -153,15 +194,19 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
      `loginctl enable-linger` ensures the user's systemd instance (and all `--user` units) survive
      logout. It is idempotent and safe to re-run.
 
+If `--watch` is set, stream `journalctl` for the unit and merge with odoo log and click-odoo-update log if applicable after a successful run.
+
 **Exit conditions**
 
 | Condition                                    | Exit code |
 |----------------------------------------------|-----------|
-| All steps succeeded                          | 0         |
+| All requested steps succeeded                | 0         |
+| Invalid `--steps` / `--except` value         | 1         |
 | SSH connection failed (remote targets only)  | 1         |
-| Repository already exists (without `--force`)| 1         |
+| Instance directory already exists (`--except dir` not given) | 1 |
 | Git clone failed                   | 1         |
-| Virtual environment step failed    | 1         |
+| Postgres role check/creation failed (`odoo` only) | 1  |
+| Virtual environment / build step failed    | 1         |
 | Template rendering / write failed  | 1         |
 
 ---
@@ -187,9 +232,13 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--ty
 |--------------------|-------------------|----------------------------------------------------------|
 | `--type`           | auto              | Deployment type: `odoo`, `python`, or `service`; auto-detected from instance name prefix if omitted |
 | `-p`               | `22`              | SSH port, default 22                                     |
-| `--db`             | `<instance_name>` | (Odoo only) Override the target database name            |
+| `--db`             | `<instance_name>` | (Odoo only) Override the target database name(s). Comma-separated for multiple databases |
 | `--ignore-hooks`   | `False`           | Skip all hook execution                                  |
 | `--repo-subdir`    | `None`            | Subdirectory within the repository to work on, if any    |
+| `--repo-branch`    | `None`            | Git branch to pull (defaults to the currently checked-out branch) |
+| `--watch`          | `False`           | Stream service logs with journalctl after a successful configure, merge with odoo log and click-odoo-update log if applicable |
+| `--steps`          | `all`             | Comma-separated steps to run, or `all`. See **Steps** below for available slugs |
+| `--except`         | `None`            | Comma-separated steps to skip (cannot be `all`). See **Steps** below for available slugs |
 
 **Hooks**
 
@@ -234,51 +283,81 @@ Hook semantics:
 
 **Steps (executed in order)**
 
+Steps 5–7 each correspond to a `--steps` / `--except` slug, shown in **bold**. `--steps` (default
+`all`) selects which of these steps run; `--except` removes steps from that selection. Steps 1–4
+and 8–9 always run regardless of `--steps`/`--except`.
+
 1. **Connect** — if `ssh_host` is set and is not `localhost`, open an SSH connection.
    Otherwise all subsequent commands run as local subprocesses.
 
-2. **Run `pre-update` hooks** — execute all `pre-update` commands in order.
+2. **Run `pre-update` hooks** — execute all `pre-update` commands in order (non-blocking).
 
 3. **Run `pre-update-required` hooks** — execute in order; if any fails, run `pre-update-fail`
    hooks and abort with exit code 1.
 
 4. **Run `pre-update-success` or `pre-update-fail`** — based on the outcome of steps 2–3.
 
-5. **Pull latest code** — inside `~/<instance_name>`, run `git pull`.
-   Abort if the directory does not exist or is not a Git repository.
-
-6. **Update dependencies / rebuild**
-
-   - **`odoo`**: the script expects all changes in dependencies, even from odoo, are explicitly listed in requirements.txt, re-run `uv pip install -r requirements.txt` to sync the virtual environment.
-   - **`python`**: run `uv pip install -r requirements.txt` (if the file exists) or `uv sync` if the file pyproject.toml exists.
-   - **`service`**: re-run the `build` command from `deploy.yml`.
-
-7. **Apply changes**
-
-   - **`odoo`**: activate the virtual environment and run the upgrade, then restart the unit:
+5. **`pull-latest-code`** — behaviour depends on type:
+   - **`odoo` / `python` without `requirements` / `service` with `repo_url`** (repo mode):
+     abort if `~/<instance_name>` is not a Git repository, otherwise run
      ```bash
-     ~/<instance_name>/.venv/bin/click-odoo-upgrade -d <database_name>
-     systemctl --user restart <instance_name>
+     git pull --recurse-submodules
      ```
-   - **`python`** / **`service`**: restart the user-level systemd unit:
+     or, if `--repo-branch`/`repo_branch` is set:
      ```bash
-     systemctl --user restart <instance_name>
+     git fetch origin && git checkout <repo_branch> && git pull --recurse-submodules
      ```
+   - **`python` with `requirements`** (package mode): no-op — there is no repository to pull.
+   - **`service` without `repo_url`**: prints "No repository to update, skipping pull…" and does
+     nothing else.
 
-8. **Run `post-update` hooks**, then `post-update-success` or `post-update-fail` depending on
-   whether step 7 succeeded.
+6. **`update-dependencies`** — behaviour depends on type:
+   - **`odoo`**: re-run `gitaggregate` if `addons/repos.yaml` exists, then
+     ```bash
+     odoo-venv update .venv --backup --yes
+     ```
+   - **`python` without `requirements`** (repo mode):
+     ```bash
+     if [ -e requirements.txt ]; then uv pip install -r requirements.txt; fi
+     if [ -e pyproject.toml ]; then uv sync; fi
+     ```
+   - **`python` with `requirements`** (package mode):
+     ```bash
+     uv pip install --upgrade <requirements...>
+     ```
+   - **`service`**: re-run the `build` command from `deploy.yml`, if any.
+
+7. **`update-database`** (`odoo` only) — for each database in `--db` (comma-separated, defaults
+   to `<instance_name>`), run:
+   ```bash
+   .venv/bin/click-odoo-update --config config/odoo.conf -d <database_name> \
+       --addons-path=<addons_path> --logfile log/upgrade.log
+   ```
+
+8. **Restart** — restart the user-level systemd unit to apply changes:
+   ```bash
+   systemctl --user restart <instance_name>
+   ```
+
+9. **Run `post-update` hooks**, then `post-update-success` or `post-update-fail` depending on
+   whether step 8 succeeded.
+
+If `--watch` is set, stream `journalctl` for the unit and merge with odoo log and click-odoo-update log if applicable after a successful run.
 
 **Exit conditions**
 
 | Condition                                    | Exit code |
 |----------------------------------------------|-----------|
-| All steps succeeded                          | 0         |
+| All requested steps succeeded                | 0         |
+| Invalid `--steps` / `--except` value         | 1         |
 | SSH connection failed (remote targets only)  | 1         |
-| Instance directory not found                 | 1         |
+| Instance directory not found / not a Git repo (`pull-latest-code`, repo mode) | 1 |
 | `pre-update-required` hook failed            | 1         |
 | `git pull` failed                            | 1         |
-| Dependency update failed                     | 1         |
-| Upgrade / restart command failed             | 1         |
+| Dependency update failed (`update-dependencies`) | 1     |
+| Package upgrade failed (`update-dependencies`, `python` package mode) | 1 |
+| Database update failed (`update-database`)   | 1         |
+| Restart failed                               | 1         |
 
 ---
 

@@ -19,7 +19,13 @@ def restart(
     ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
     watch: Annotated[
         bool,
-        typer.Option("--watch", help="Stream service logs with journalctl after restarting."),
+        typer.Option(
+            "--watch",
+            help=(
+                "Stream service logs with journalctl after restarting. "
+                "Also merge with odoo and click-odoo-update logs if applicable."
+            ),
+        ),
     ] = False,
 ) -> None:
     """Restart the systemd unit for a deployment instance."""

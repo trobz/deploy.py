@@ -1,6 +1,6 @@
 import pytest
 
-from trobz_deploy.utils.config import parse_instance_name
+from trobz_deploy.utils.config import parse_instance_name, parse_step_option, validate_step_slugs
 
 # ---------------------------------------------------------------------------
 # Valid names from the SPEC examples
@@ -104,3 +104,33 @@ def test_unknown_environment_raises():
 def test_error_message_lists_known_envs():
     with pytest.raises(ValueError, match="production"):
         parse_instance_name("odoo-proj-badenv")
+
+
+# ---------------------------------------------------------------------------
+# Step option parsing and validation
+# ---------------------------------------------------------------------------
+
+STEPS = {"foo": "foo", "bar": "bar", "baz": "baz"}
+
+
+def test_parse_step_option_splits_and_trims():
+    assert parse_step_option("foo, bar") == ["foo", "bar"]
+
+
+def test_parse_step_option_handles_none_and_empty():
+    assert parse_step_option(None) == []
+    assert parse_step_option("") == []
+
+
+def test_validate_step_slugs_accepts_all_when_allowed():
+    validate_step_slugs("--step", ["all"], STEPS, allow_all=True)
+
+
+def test_validate_step_slugs_rejects_all_when_not_allowed():
+    with pytest.raises(ValueError, match="Invalid --except value"):
+        validate_step_slugs("--except", ["all"], STEPS, allow_all=False)
+
+
+def test_validate_step_slugs_rejects_unknown_slug():
+    with pytest.raises(ValueError, match="Invalid --step value"):
+        validate_step_slugs("--step", ["bogus"], STEPS, allow_all=True)

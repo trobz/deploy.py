@@ -49,7 +49,13 @@ def status(
     ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
     watch: Annotated[
         bool,
-        typer.Option("--watch", help="Stream service logs with journalctl after showing status."),
+        typer.Option(
+            "--watch",
+            help=(
+                "Stream service logs with journalctl after showing status. "
+                "Also merge with odoo and click-odoo-update logs if applicable."
+            ),
+        ),
     ] = False,
 ) -> None:
     """Show status of a deployment instance."""

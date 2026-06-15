@@ -32,6 +32,7 @@ $ deploy [OPTIONS] COMMAND [ARGS]...
 
 * `configure`: Configure a new deployment instance.
 * `update`: Update an existing deployment instance.
+* `restart`: Restart the systemd unit for a deployment...
 * `status`: Show status of a deployment instance.
 
 ## `deploy configure`
@@ -54,9 +55,11 @@ $ deploy configure [OPTIONS] INSTANCE_NAME [SSH_HOST] [REPO_URL]
 
 * `--type [odoo|python|service]`: Deployment type (auto-detected from instance name prefix if omitted).
 * `-p, --port INTEGER`: SSH port on the remote host.
-* `--force`: Re-run setup steps even if the instance directory already exists.
 * `--repo-subdir TEXT`: Subdirectory within the repo to use as the service root (for monorepos).
 * `--repo-branch TEXT`: Git branch to clone and track (defaults to the repository&#x27;s default branch).
+* `--watch`: Stream service logs with journalctl after a successful configure. Also merge with odoo and click-odoo-update logs if applicable.
+* `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: dir, pg, gitaggregate, venv, unit.  \[default: all\]
+* `--except TEXT`: Comma-separated steps to skip. Available: dir, pg, gitaggregate, venv, unit.
 * `--help`: Show this message and exit.
 
 ## `deploy update`
@@ -82,7 +85,31 @@ $ deploy update [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `--ignore-hooks`: Skip all hook execution.
 * `--repo-subdir TEXT`: Subdirectory within the repo to use as the service root (for monorepos).
 * `--repo-branch TEXT`: Git branch to pull (defaults to the currently checked-out branch).
-* `--watch`: Stream service logs with journalctl after a successful update.
+* `--watch`: Stream service logs with journalctl after a successful update. Also merge with odoo and click-odoo-update logs if applicable.
+* `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: pull, venv, db.  \[default: all\]
+* `--except TEXT`: Comma-separated steps to skip. Available: pull, venv, db.
+* `--help`: Show this message and exit.
+
+## `deploy restart`
+
+Restart the systemd unit for a deployment instance.
+
+**Usage**:
+
+```console
+$ deploy restart [OPTIONS] INSTANCE_NAME [SSH_HOST]
+```
+
+**Arguments**:
+
+* `INSTANCE_NAME`: \[required\]
+* `[SSH_HOST]`
+
+**Options**:
+
+* `--type [odoo|python|service]`: Deployment type (auto-detected from instance name prefix if omitted).
+* `-p, --port INTEGER`: SSH port on the remote host.
+* `--watch`: Stream service logs with journalctl after restarting. Also merge with odoo and click-odoo-update logs if applicable.
 * `--help`: Show this message and exit.
 
 ## `deploy status`
@@ -102,6 +129,7 @@ $ deploy status [OPTIONS] INSTANCE_NAME [SSH_HOST]
 
 **Options**:
 
+* `--type [odoo|python|service]`: Deployment type (auto-detected from instance name prefix if omitted).
 * `-p, --port INTEGER`: SSH port on the remote host.
-* `--watch`: Stream service logs with journalctl after showing status.
+* `--watch`: Stream service logs with journalctl after showing status. Also merge with odoo and click-odoo-update logs if applicable.
 * `--help`: Show this message and exit.
