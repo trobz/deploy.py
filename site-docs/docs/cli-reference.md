@@ -32,6 +32,7 @@ $ deploy [OPTIONS] COMMAND [ARGS]...
 
 * `configure`: Configure a new deployment instance.
 * `update`: Update an existing deployment instance.
+* `restart`: Restart the systemd unit for a deployment...
 * `status`: Show status of a deployment instance.
 
 ## `deploy configure`
@@ -57,6 +58,7 @@ $ deploy configure [OPTIONS] INSTANCE_NAME [SSH_HOST] [REPO_URL]
 * `--force`: Re-run setup steps even if the instance directory already exists.
 * `--repo-subdir TEXT`: Subdirectory within the repo to use as the service root (for monorepos).
 * `--repo-branch TEXT`: Git branch to clone and track (defaults to the repository&#x27;s default branch).
+* `--watch`: Stream service logs with journalctl after a successful configure.
 * `--help`: Show this message and exit.
 
 ## `deploy update`
@@ -83,6 +85,32 @@ $ deploy update [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `--repo-subdir TEXT`: Subdirectory within the repo to use as the service root (for monorepos).
 * `--repo-branch TEXT`: Git branch to pull (defaults to the currently checked-out branch).
 * `--watch`: Stream service logs with journalctl after a successful update.
+* `--ignore-addons TEXT`: Comma-separated list of addons to ignore. These will not be updated if their checksum has changed. Use with care. Passed to click-odoo-update --ignore-addons.
+* `--ignore-core-addons`: Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons are not updated. This is normally safe, due the Odoo stable policy.
+* `--update-all`: Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).
+* `-m, --modules TEXT`: Comma-separated list of modules to update by running Odoo directly (-u MODULES --stop-after-init), skipping click-odoo-update.
+* `--help`: Show this message and exit.
+
+## `deploy restart`
+
+Restart the systemd unit for a deployment instance.
+
+**Usage**:
+
+```console
+$ deploy restart [OPTIONS] INSTANCE_NAME [SSH_HOST]
+```
+
+**Arguments**:
+
+* `INSTANCE_NAME`: \[required\]
+* `[SSH_HOST]`
+
+**Options**:
+
+* `--type [odoo|python|service]`: Deployment type (auto-detected from instance name prefix if omitted).
+* `-p, --port INTEGER`: SSH port on the remote host.
+* `--watch`: Stream service logs with journalctl after restarting.
 * `--help`: Show this message and exit.
 
 ## `deploy status`
@@ -102,6 +130,7 @@ $ deploy status [OPTIONS] INSTANCE_NAME [SSH_HOST]
 
 **Options**:
 
+* `--type [odoo|python|service]`: Deployment type (auto-detected from instance name prefix if omitted).
 * `-p, --port INTEGER`: SSH port on the remote host.
 * `--watch`: Stream service logs with journalctl after showing status.
 * `--help`: Show this message and exit.

@@ -50,3 +50,8 @@ def setup_package_venv(executor: Executor, instance_path: str, requirements: lis
 def upgrade_package(executor: Executor, instance_path: str, requirements: list[str]) -> None:
     """Upgrade pip packages in an existing venv."""
     executor.run(f"uv pip install --upgrade {' '.join(requirements)}", cwd=instance_path)
+
+
+def get_odoo_version(executor: Executor, instance_path: str) -> str:
+    """Read the ``odoo_version`` from ``.venv/.odoo-venv.toml`` (written by odoo-venv)."""
+    return executor.capture("grep -m1 '^odoo_version' .venv/.odoo-venv.toml | cut -d'\"' -f2", cwd=instance_path)
