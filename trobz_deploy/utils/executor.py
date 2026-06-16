@@ -85,11 +85,16 @@ class Executor:
 
         return result.stdout or ""
 
-    def capture(self, command: str, cwd: str | None = None) -> str:
+    def capture(self, command: str, cwd: str | None = None, dry_run: bool = False) -> str:
         """Run a command and always return its stdout (never streams).
 
         Use this when the output is needed programmatically.
         """
+        if dry_run:
+            display = f"cd {cwd} && {command}" if cwd else command
+            typer.secho(f"[dry-run] $ {display}", fg="cyan")
+            return ""
+
         argv = self._build_argv(command, cwd)
         is_remote = isinstance(argv, list)
 

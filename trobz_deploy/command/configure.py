@@ -255,6 +255,7 @@ def configure(  # noqa: C901
                 res = executor.capture(
                     "if [ -f server.py ]; then echo server.py; fi",
                     cwd=service_path,
+                    dry_run=dry_run,
                 )
                 if res == "server.py":
                     exec_start = "python server.py"
