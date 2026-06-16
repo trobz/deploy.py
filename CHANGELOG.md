@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.21.1 (2026-06-16)
+
+### Bug Fixes
+
+- **configure**: Handle missing service_path in dry-run mode
+  ([`9b11c16`](https://github.com/trobz/deploy.py/commit/9b11c1697179bf1065c4ace60e535c96c03da954))
+
+
 ## v0.21.0 (2026-06-16)
 
 ### Features
