@@ -60,91 +60,18 @@ CONFIGURE_STEPS = {
 }
 
 
-def configure(  # noqa: C901
-    ctx: typer.Context,
-    instance_name: Annotated[str, typer.Argument()],
-    ssh_host: Annotated[str | None, typer.Argument()] = None,
-    repo_url: Annotated[str | None, typer.Argument()] = None,
-    deploy_type: Annotated[
-        DeployType | None,
-        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
-    ] = None,
-    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
-    repo_subdir: Annotated[
-        str | None,
-        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
-    ] = None,
-    repo_branch: Annotated[
-        str | None,
-        typer.Option(help="Git branch to clone and track (defaults to the repository's default branch)."),
-    ] = None,
-    recreate: Annotated[
-        bool,
-        typer.Option(
-            help="Re-create venv in case it exists. This is useful when you want to update the venv.",
-        ),
-    ] = False,
-    watch: Annotated[
-        bool,
-        typer.Option(
-            "--watch",
-            help=(
-                "Stream service logs with journalctl after a successful configure. "
-                "Also merge with odoo and click-odoo-update logs if applicable."
-            ),
-        ),
-    ] = False,
-    steps: Annotated[
-        str,
-        typer.Option(
-            "--steps",
-            help=f"Comma-separated steps to run, or 'all'. Available: {', '.join(CONFIGURE_STEPS.keys())}.",
-        ),
-    ] = "all",
-    skip_steps: Annotated[
-        str | None,
-        typer.Option(
-            "--except",
-            help=f"Comma-separated steps to skip. Available: {', '.join(CONFIGURE_STEPS.keys())}.",
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Go through all steps without running any writing/destructive commands.",
-        ),
-    ] = False,
+def _perform_configure(  # noqa: C901
+    opts: dict[str, Any],
+    instance_name: str,
+    eff_steps: list[str],
+    eff_skip_steps: list[str],
+    watch: bool,
+    dry_run: bool,
 ) -> None:
-    """Configure a new deployment instance."""
-    eff_steps = parse_step_option(steps)
-    eff_skip_steps = parse_step_option(skip_steps)
-    try:
-        validate_step_slugs("--steps", eff_steps, CONFIGURE_STEPS, allow_all=True)
-        validate_step_slugs("--except", eff_skip_steps, CONFIGURE_STEPS, allow_all=False)
-    except ValueError as exc:
-        typer.echo(typer.style(str(exc), fg="red"), err=True)
-        raise typer.Exit(code=1) from exc
-
     def _run_step(slug: str) -> bool:
         return ("all" in eff_steps or slug in eff_steps) and slug not in eff_skip_steps
 
-    cfg = load_config(ctx.obj["config"], instance_name)
-    try:
-        opts = resolve_options(
-            cfg,
-            instance_name,
-            ssh_host=ssh_host,
-            ssh_port=ssh_port,
-            repo_url=repo_url,
-            repo_branch=repo_branch,
-            deploy_type=deploy_type.value if deploy_type else None,
-            repo_subdir=repo_subdir,
-        )
-    except ValueError as exc:
-        typer.echo(typer.style(str(exc), fg="red"), err=True)
-        raise typer.Exit(code=1) from exc
-
+    recreate = opts["recreate"]
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_repo_url: str | None = opts.get("repo_url")
@@ -158,10 +85,7 @@ def configure(  # noqa: C901
         typer.echo(typer.style(msg, fg="red"), err=True)
         raise typer.Exit(code=1)
 
-    if dry_run:
-        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
-
-    executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
+    executor = Executor(eff_ssh_host, opts["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
     eff_repo_subdir: str | None = opts.get("repo_subdir")
@@ -306,13 +230,103 @@ def configure(  # noqa: C901
                 fg="yellow",
             )
 
-    if dry_run:
-        typer.secho(f"\nDry run complete: instance {instance_name!r} was not changed.", fg="green")
-    else:
-        typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")
-
     if watch:
         if dry_run:
             typer.secho("Skipping --watch: no service was started in dry-run mode.", fg="yellow")
         else:
             executor.watch_logs(eff_type, instance_name)
+
+
+def configure(
+    ctx: typer.Context,
+    instance_name: Annotated[str, typer.Argument()],
+    ssh_host: Annotated[str | None, typer.Argument()] = None,
+    repo_url: Annotated[str | None, typer.Argument()] = None,
+    deploy_type: Annotated[
+        DeployType | None,
+        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
+    ] = None,
+    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
+    repo_subdir: Annotated[
+        str | None,
+        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
+    ] = None,
+    repo_branch: Annotated[
+        str | None,
+        typer.Option(help="Git branch to clone and track (defaults to the repository's default branch)."),
+    ] = None,
+    recreate: Annotated[
+        bool,
+        typer.Option(
+            help="Re-create venv in case it exists. This is useful when you want to update the venv.",
+        ),
+    ] = False,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch",
+            help=(
+                "Stream service logs with journalctl after a successful configure. "
+                "Also merge with odoo and click-odoo-update logs if applicable."
+            ),
+        ),
+    ] = False,
+    steps: Annotated[
+        str,
+        typer.Option(
+            "--steps",
+            help=f"Comma-separated steps to run, or 'all'. Available: {', '.join(CONFIGURE_STEPS.keys())}.",
+        ),
+    ] = "all",
+    skip_steps: Annotated[
+        str | None,
+        typer.Option(
+            "--except",
+            help=f"Comma-separated steps to skip. Available: {', '.join(CONFIGURE_STEPS.keys())}.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Go through all steps without running any writing/destructive commands.",
+        ),
+    ] = False,
+) -> None:
+    """Configure a new deployment instance."""
+    eff_steps = parse_step_option(steps)
+    eff_skip_steps = parse_step_option(skip_steps)
+    try:
+        validate_step_slugs("--steps", eff_steps, CONFIGURE_STEPS, allow_all=True)
+        validate_step_slugs("--except", eff_skip_steps, CONFIGURE_STEPS, allow_all=False)
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
+    cfg = load_config(ctx.obj["config"], instance_name)
+    try:
+        opts = resolve_options(
+            cfg,
+            instance_name,
+            ssh_host=ssh_host,
+            ssh_port=ssh_port,
+            repo_url=repo_url,
+            repo_branch=repo_branch,
+            deploy_type=deploy_type.value if deploy_type else None,
+            repo_subdir=repo_subdir,
+        )
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+    opts["verbose"] = ctx.obj["verbose"]
+    opts["recreate"] = recreate
+
+    if dry_run:
+        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
+
+    _perform_configure(opts, instance_name, eff_steps, eff_skip_steps, watch, dry_run)
+
+    if dry_run:
+        typer.secho(f"\nDry run complete: instance {instance_name!r} was not changed.", fg="green")
+    else:
+        typer.secho(f"\nInstance {instance_name!r} configured successfully.", fg="green")

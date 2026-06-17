@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -38,6 +38,51 @@ def _get_git_info(executor: Executor, instance_path: str) -> tuple[str, str, str
     return remote_url, branch, commit
 
 
+def _perform_status(
+    opts: dict[str, Any],
+    instance_name: str,
+    watch: bool,
+) -> None:
+    eff_ssh_host: str | None = opts.get("ssh_host")
+    eff_ssh_port: int | None = opts.get("ssh_port")
+    eff_type: str = opts["type"]
+
+    executor = Executor(eff_ssh_host, opts["verbose"], ssh_port=eff_ssh_port)
+    home_dir = executor.capture("echo $HOME")
+    instance_path = f"{home_dir}/{instance_name}"
+
+    # Step 2: Verify instance directory exists
+    try:
+        executor.run(f"test -d {instance_path}")
+    except ExecutorError:
+        msg = f"Instance directory not found: ~/{instance_name}"
+        typer.echo(typer.style(msg, fg="red"), err=True)
+        raise typer.Exit(code=1) from None
+
+    # Step 3: Git info (skipped for no-repo service instances)
+    has_repo = bool(opts.get("repo_url"))
+    remote_url = branch = commit = None
+    if has_repo:
+        try:
+            remote_url, branch, commit = _get_git_info(executor, instance_path)
+        except ExecutorError as exc:
+            msg = f"Failed to get git info: {exc}"
+            typer.echo(typer.style(msg, fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
+
+    # Step 4: systemd unit status
+    unit_line = _get_unit_line(executor, instance_name)
+
+    typer.echo(f"Instance:  {instance_name}")
+    if has_repo:
+        typer.echo(f"Remote:    {remote_url}")
+        typer.echo(f"Branch:    {branch} ({commit})")
+    typer.echo(f"Unit:      {unit_line}")
+
+    if watch:
+        executor.watch_logs(eff_type, instance_name)
+
+
 def status(
     ctx: typer.Context,
     instance_name: Annotated[str, typer.Argument()],
@@ -71,42 +116,6 @@ def status(
     except ValueError as exc:
         typer.echo(typer.style(str(exc), fg="red"), err=True)
         raise typer.Exit(code=1) from exc
+    opts["verbose"] = ctx.obj["verbose"]
 
-    eff_ssh_host: str | None = opts.get("ssh_host")
-    eff_ssh_port: int | None = opts.get("ssh_port")
-    eff_type: str = opts["type"]
-
-    executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
-    home_dir = executor.capture("echo $HOME")
-    instance_path = f"{home_dir}/{instance_name}"
-
-    # Step 2: Verify instance directory exists
-    try:
-        executor.run(f"test -d {instance_path}")
-    except ExecutorError:
-        msg = f"Instance directory not found: ~/{instance_name}"
-        typer.echo(typer.style(msg, fg="red"), err=True)
-        raise typer.Exit(code=1) from None
-
-    # Step 3: Git info (skipped for no-repo service instances)
-    has_repo = bool(cfg.get("repo_url"))
-    remote_url = branch = commit = None
-    if has_repo:
-        try:
-            remote_url, branch, commit = _get_git_info(executor, instance_path)
-        except ExecutorError as exc:
-            msg = f"Failed to get git info: {exc}"
-            typer.echo(typer.style(msg, fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
-
-    # Step 4: systemd unit status
-    unit_line = _get_unit_line(executor, instance_name)
-
-    typer.echo(f"Instance:  {instance_name}")
-    if has_repo:
-        typer.echo(f"Remote:    {remote_url}")
-        typer.echo(f"Branch:    {branch} ({commit})")
-    typer.echo(f"Unit:      {unit_line}")
-
-    if watch:
-        executor.watch_logs(eff_type, instance_name)
+    _perform_status(opts, instance_name, watch)
