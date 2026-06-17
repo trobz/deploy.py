@@ -109,6 +109,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 | `-p`           | `22`     | SSH port, default 22                                                                                |
 | `--repo-subdir`| `None`   | Subdirectory within the repository to work on, if any                                               |
 | `--repo-branch`| `None`   | Git branch to clone and track (defaults to the repository's default branch)                        |
+" `--recreate`   | `False`  | Re-create the venv when it already exists. Backup the existing one.                                 |
 | `--watch`      | `False`  | Stream service logs with journalctl after a successful configure, merge with odoo log and click-odoo-update log if applicable |
 | `--steps`      | `all`    | Comma-separated steps to run, or `all`. See **Steps** below for available slugs                    |
 | `--except`     | `None`   | Comma-separated steps to skip (cannot be `all`). See **Steps** below for available slugs           |
@@ -153,7 +154,8 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 
 5. **`set-up-environment`** — set up the application environment:
 
-   - **`odoo`**: create if not present a virtual environment using `odoo-venv`:
+   - **`odoo`**: create if not present a virtual environment using `odoo-venv`, if
+     there is `--recreate` option then re-create the venv:
      ```bash
      odoo-venv create --project-dir ~/<instance_name> --preset project
      ```

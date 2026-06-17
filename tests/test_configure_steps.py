@@ -31,7 +31,7 @@ def _executor_mock_fresh_dir():
     mock = _executor_mock()
 
     def run_side_effect(cmd, cwd=None, check=True, dry_run=False):
-        if cmd.startswith("test -d"):
+        if cmd.startswith("test -d") or cmd.startswith("test -f"):
             msg = "not found"
             raise ExecutorError(msg)
         return ""
@@ -199,6 +199,7 @@ def test_step_all_runs_every_step_for_service(runner):
         "service-myapp-production",
         "service",
         [],
+        executor_factory=_executor_mock_fresh_dir,
     )
 
     assert result.exit_code == 0

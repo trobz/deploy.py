@@ -12,8 +12,12 @@ from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_p
 
 
 def _is_git_repo(executor: Executor, path: str) -> bool:
+    return _file_exists(executor, f"{path}/.git", file_type="d")
+
+
+def _file_exists(executor: Executor, path: str, file_type: str = "f") -> bool:
     try:
-        executor.run(f"test -d {path}/.git")
+        executor.run(f"test -{file_type} {path}")
     except ExecutorError:
         return False
     else:
@@ -74,6 +78,12 @@ def configure(  # noqa: C901
         str | None,
         typer.Option(help="Git branch to clone and track (defaults to the repository's default branch)."),
     ] = None,
+    recreate: Annotated[
+        bool,
+        typer.Option(
+            help="Re-create venv in case it exists. This is useful when you want to update the venv.",
+        ),
+    ] = False,
     watch: Annotated[
         bool,
         typer.Option(
@@ -216,12 +226,12 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(executor, instance_path, dry_run=dry_run)
+                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run)
             elif eff_type == "python":
                 if eff_requirements:
                     setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
                 else:
-                    setup_python_venv(executor, service_path, dry_run=dry_run)
+                    setup_python_venv(executor, service_path, recreate=recreate, dry_run=dry_run)
                     executor.run(
                         "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi",
                         cwd=service_path,
@@ -237,53 +247,64 @@ def configure(  # noqa: C901
 
     # Step 5: Install systemd unit
     if _run_step("unit"):
-        typer.secho(f"\n{CONFIGURE_STEPS['unit']}…", fg="green")
-        unit_instance_path = instance_path if eff_requirements else service_path
-        venv_path = f"{unit_instance_path}/.venv"
-
-        template_vars: dict[str, Any] = {
-            "instance_name": instance_name,
-            "instance_path": unit_instance_path,
-        }
-        if eff_type == "odoo":
-            template_vars["venv_path"] = venv_path
-            odoo_addons_path = executor.capture("which odoo-addons-path")
-            template_vars["odoo_addons_path"] = odoo_addons_path
-        else:
-            exec_start: str = opts.get("exec_start", "")
-            if not exec_start and not eff_requirements:
-                res = executor.capture(
-                    "if [ -f server.py ]; then echo server.py; fi",
-                    cwd=service_path,
-                    dry_run=dry_run,
-                )
-                if res == "server.py":
-                    exec_start = "python server.py"
-            if not exec_start:
-                msg = "exec_start is required for service or python type. Set it in deploy.yml."
-                typer.echo(typer.style(msg, fg="red"), err=True)
-                raise typer.Exit(code=1)
-            if eff_type == "python":
-                template_vars["venv_path"] = venv_path
-            template_vars["exec_start"] = exec_start
-
-        try:
-            unit_content = render_unit(eff_type, **template_vars)
-        except Exception as exc:
-            typer.echo(typer.style(f"Template rendering failed: {exc}", fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
-
         unit_dir = "$HOME/.config/systemd/user"
         unit_path = f"{unit_dir}/{instance_name}.service"
-        try:
-            executor.run(f"mkdir -p {unit_dir}", dry_run=dry_run)
-            executor.write_file(unit_content, unit_path, dry_run=dry_run)
-            executor.run("loginctl enable-linger", dry_run=dry_run)
-            executor.run("systemctl --user daemon-reload", dry_run=dry_run)
-            executor.run(f"systemctl --user enable --now {instance_name}", dry_run=dry_run)
-        except ExecutorError as exc:
-            typer.echo(typer.style(str(exc), fg="red"), err=True)
-            raise typer.Exit(code=1) from exc
+        unit_file_exists = _file_exists(executor, unit_path)
+        if not unit_file_exists or recreate:
+            typer.secho(f"\n{CONFIGURE_STEPS['unit']}…", fg="green")
+            unit_instance_path = instance_path if eff_requirements else service_path
+            venv_path = f"{unit_instance_path}/.venv"
+
+            template_vars: dict[str, Any] = {
+                "instance_name": instance_name,
+                "instance_path": unit_instance_path,
+            }
+            if eff_type == "odoo":
+                template_vars["venv_path"] = venv_path
+                odoo_addons_path = executor.capture("which odoo-addons-path")
+                template_vars["odoo_addons_path"] = odoo_addons_path
+            else:
+                exec_start: str = opts.get("exec_start", "")
+                if not exec_start and not eff_requirements:
+                    res = executor.capture(
+                        "if [ -f server.py ]; then echo server.py; fi",
+                        cwd=service_path,
+                        dry_run=dry_run,
+                    )
+                    if res == "server.py":
+                        exec_start = "python server.py"
+                if not exec_start:
+                    msg = "exec_start is required for service or python type. Set it in deploy.yml."
+                    typer.echo(typer.style(msg, fg="red"), err=True)
+                    raise typer.Exit(code=1)
+                if eff_type == "python":
+                    template_vars["venv_path"] = venv_path
+                template_vars["exec_start"] = exec_start
+
+            try:
+                unit_content = render_unit(eff_type, **template_vars)
+            except Exception as exc:
+                typer.echo(typer.style(f"Template rendering failed: {exc}", fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
+
+            try:
+                executor.run(f"mkdir -p {unit_dir}", dry_run=dry_run)
+                executor.write_file(unit_content, unit_path, dry_run=dry_run)
+                if not unit_file_exists:
+                    executor.run("loginctl enable-linger", dry_run=dry_run)
+                    executor.run("systemctl --user daemon-reload", dry_run=dry_run)
+                    executor.run(f"systemctl --user enable --now {instance_name}", dry_run=dry_run)
+                else:
+                    executor.run("systemctl --user daemon-reload", dry_run=dry_run)
+                    executor.run(f"systemctl --user restart {instance_name}", dry_run=dry_run)
+            except ExecutorError as exc:
+                typer.echo(typer.style(str(exc), fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
+        else:
+            typer.secho(
+                f"\nUnit {instance_name!r} already exists. Use --recreate to reconfigure.",
+                fg="yellow",
+            )
 
     if dry_run:
         typer.secho(f"\nDry run complete: instance {instance_name!r} was not changed.", fg="green")

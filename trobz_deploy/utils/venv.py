@@ -5,19 +5,35 @@ import typer
 from trobz_deploy.utils.executor import Executor, ExecutorError
 
 
-def _venv_exists(executor: Executor, instance_path: str) -> bool:
+def _venv_exists(executor: Executor, instance_path: str, suffix: str = "") -> bool:
     try:
-        executor.run(f"test -d {instance_path}/.venv")
+        executor.run(f"test -d {instance_path}/.venv{suffix}")
     except ExecutorError:
         return False
     return True
 
 
-def setup_odoo_venv(executor: Executor, instance_path: str, dry_run: bool = False) -> None:
+def _backup_venv(executor: Executor, instance_path: str, dry_run: bool = False) -> None:
+    if _venv_exists(executor, instance_path, suffix=".bak"):
+        executor.run(f"rm -r {instance_path}/.venv.bak", dry_run=dry_run)
+    executor.run(f"mv {instance_path}/.venv {instance_path}/.venv.bak", dry_run=dry_run)
+
+
+def _show_venv_exists() -> None:
+    msg = (
+        "Venv exists, skipping venv creation. Use --except venv to skip this step or --recreate to re-create the venv."
+    )
+    typer.secho(msg, fg="yellow")
+
+
+def setup_odoo_venv(executor: Executor, instance_path: str, recreate: bool = False, dry_run: bool = False) -> None:
     """Create or update an Odoo virtual environment using ``odoo-venv``."""
     if _venv_exists(executor, instance_path):
-        typer.secho("Venv exists, skipping venv creation. Use --except venv to skip this step.", fg="yellow")
-        return
+        if recreate:
+            _backup_venv(executor, instance_path, dry_run=dry_run)
+        else:
+            _show_venv_exists()
+            return
     executor.run(
         f"odoo-venv create --project-dir {instance_path} --preset project",
         cwd=instance_path,
@@ -25,11 +41,18 @@ def setup_odoo_venv(executor: Executor, instance_path: str, dry_run: bool = Fals
     )
 
 
-def setup_python_venv(executor: Executor, instance_path: str, dry_run: bool = False) -> None:
+def setup_python_venv(executor: Executor, instance_path: str, recreate: bool = False, dry_run: bool = False) -> None:
     """Create a venv with ``uv`` and install dependencies from requirements.txt."""
+    need_create = False
     if _venv_exists(executor, instance_path):
-        typer.secho("Venv exists, skipping venv creation. Use --except venv to skip this step.", fg="yellow")
+        if recreate:
+            _backup_venv(executor, instance_path, dry_run=dry_run)
+            need_create = True
+        else:
+            _show_venv_exists()
     else:
+        need_create = True
+    if need_create:
         executor.run("uv venv .venv", cwd=instance_path, dry_run=dry_run)
     setup_python_deps(executor, instance_path, dry_run=dry_run)
 
