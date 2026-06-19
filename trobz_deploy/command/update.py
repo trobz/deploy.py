@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
 from trobz_deploy.utils.addons import get_addons_path
-from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
-from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.config import (
+    DeployType,
+    load_config,
+    normalize_hosts,
+    parse_step_option,
+    resolve_host_steps,
+    resolve_options,
+    validate_step_slugs,
+)
+from trobz_deploy.utils.executor import Executor, ExecutorError, watch_logs_multi
 from trobz_deploy.utils.venv import get_odoo_version, setup_python_deps, upgrade_package
 
 UPDATE_STEPS = {
@@ -16,128 +24,21 @@ UPDATE_STEPS = {
 }
 
 
-def update(  # noqa: C901
-    ctx: typer.Context,
-    instance_name: Annotated[str, typer.Argument()],
-    ssh_host: Annotated[str | None, typer.Argument()] = None,
-    deploy_type: Annotated[
-        DeployType | None,
-        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
-    ] = None,
-    db: Annotated[
-        str | None,
-        typer.Option(
-            help="Override the target database name (Odoo only). Can be comma-separated for multiple databases."
-        ),
-    ] = None,
-    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
-    ignore_hooks: Annotated[bool, typer.Option("--ignore-hooks", help="Skip all hook execution.")] = False,
-    repo_subdir: Annotated[
-        str | None,
-        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
-    ] = None,
-    repo_branch: Annotated[
-        str | None,
-        typer.Option(help="Git branch to pull (defaults to the currently checked-out branch)."),
-    ] = None,
-    watch: Annotated[
-        bool,
-        typer.Option(
-            "--watch",
-            help=(
-                "Stream service logs with journalctl after a successful update. "
-                "Also merge with odoo and click-odoo-update logs if applicable."
-            ),
-        ),
-    ] = False,
-    steps: Annotated[
-        str,
-        typer.Option(
-            "--steps",
-            help=f"Comma-separated steps to run, or 'all'. Available: {', '.join(UPDATE_STEPS.keys())}.",
-        ),
-    ] = "all",
-    skip_steps: Annotated[
-        str | None,
-        typer.Option(
-            "--except",
-            help=f"Comma-separated steps to skip. Available: {', '.join(UPDATE_STEPS.keys())}.",
-        ),
-    ] = None,
-    ignore_addons: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Comma-separated list of addons to ignore. These will not be updated if their checksum has changed. "
-                "Use with care. Passed to click-odoo-update --ignore-addons."
-            ),
-        ),
-    ] = None,
-    ignore_core_addons: Annotated[
-        bool,
-        typer.Option(
-            "--ignore-core-addons",
-            help=(
-                "Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons "
-                "are not updated. This is normally safe, due the Odoo stable policy."
-            ),
-        ),
-    ] = False,
-    update_all: Annotated[
-        bool,
-        typer.Option(
-            "--update-all",
-            help="Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).",
-        ),
-    ] = False,
-    modules: Annotated[
-        str | None,
-        typer.Option(
-            "-m",
-            "--modules",
-            help=(
-                "Comma-separated list of modules to update by running Odoo directly "
-                "(-u MODULES --stop-after-init), skipping click-odoo-update."
-            ),
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Go through all steps without running any writing/destructive commands.",
-        ),
-    ] = False,
-) -> None:
-    """Update an existing deployment instance."""
-    eff_steps = parse_step_option(steps)
-    eff_skip_steps = parse_step_option(skip_steps)
-    try:
-        validate_step_slugs("--steps", eff_steps, UPDATE_STEPS, allow_all=True)
-        validate_step_slugs("--except", eff_skip_steps, UPDATE_STEPS, allow_all=False)
-    except ValueError as exc:
-        typer.echo(typer.style(str(exc), fg="red"), err=True)
-        raise typer.Exit(code=1) from exc
-
+def _perform_update(  # noqa: C901
+    opts: dict[str, Any],
+    instance_name: str,
+    eff_steps: list[str],
+    eff_skip_steps: list[str],
+    dry_run: bool,
+) -> Executor:
     def _run_step(slug: str) -> bool:
         return ("all" in eff_steps or slug in eff_steps) and slug not in eff_skip_steps
 
-    cfg = load_config(ctx.obj["config"], instance_name)
-    try:
-        opts = resolve_options(
-            cfg,
-            instance_name,
-            ssh_host=ssh_host,
-            ssh_port=ssh_port,
-            deploy_type=deploy_type.value if deploy_type else None,
-            db=db,
-            repo_subdir=repo_subdir,
-            repo_branch=repo_branch,
-        )
-    except ValueError as exc:
-        typer.echo(typer.style(str(exc), fg="red"), err=True)
-        raise typer.Exit(code=1) from exc
-
+    ignore_hooks = opts["ignore_hooks"]
+    ignore_addons = opts["ignore_addons"]
+    ignore_core_addons = opts["ignore_core_addons"]
+    update_all = opts["update_all"]
+    modules = opts["modules"]
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
     eff_type: str = opts["type"]
@@ -149,10 +50,7 @@ def update(  # noqa: C901
     eff_requirements: list[str] = ([_req] if isinstance(_req, str) else _req) if _req else []
     hooks: dict = opts.get("hooks", {})
 
-    if dry_run:
-        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
-
-    executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
+    executor = Executor(eff_ssh_host, opts["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
     instance_path = f"{home_dir}/{instance_name}"
     eff_repo_subdir: str | None = opts.get("repo_subdir")
@@ -304,13 +202,175 @@ def update(  # noqa: C901
     run_hooks("post-update")
     run_hooks("post-update-success")
 
+    return executor
+
+
+def update(  # noqa: C901
+    ctx: typer.Context,
+    instance_name: Annotated[str, typer.Argument()],
+    ssh_host: Annotated[str | None, typer.Argument()] = None,
+    deploy_type: Annotated[
+        DeployType | None,
+        typer.Option("--type", help="Deployment type (auto-detected from instance name prefix if omitted)."),
+    ] = None,
+    db: Annotated[
+        str | None,
+        typer.Option(
+            help="Override the target database name (Odoo only). Can be comma-separated for multiple databases."
+        ),
+    ] = None,
+    ssh_port: Annotated[int | None, typer.Option("-p", "--port", help="SSH port on the remote host.")] = None,
+    ignore_hooks: Annotated[bool, typer.Option("--ignore-hooks", help="Skip all hook execution.")] = False,
+    repo_subdir: Annotated[
+        str | None,
+        typer.Option(help="Subdirectory within the repo to use as the service root (for monorepos)."),
+    ] = None,
+    repo_branch: Annotated[
+        str | None,
+        typer.Option(help="Git branch to pull (defaults to the currently checked-out branch)."),
+    ] = None,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch",
+            help=(
+                "Stream service logs with journalctl after a successful update. "
+                "Also merge with odoo and click-odoo-update logs if applicable."
+            ),
+        ),
+    ] = False,
+    steps: Annotated[
+        str,
+        typer.Option(
+            "--steps",
+            help=f"Comma-separated steps to run, or 'all'. Available: {', '.join(UPDATE_STEPS.keys())}.",
+        ),
+    ] = "all",
+    skip_steps: Annotated[
+        str | None,
+        typer.Option(
+            "--except",
+            help=f"Comma-separated steps to skip. Available: {', '.join(UPDATE_STEPS.keys())}.",
+        ),
+    ] = None,
+    ignore_addons: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Comma-separated list of addons to ignore. These will not be updated if their checksum has changed. "
+                "Use with care. Passed to click-odoo-update --ignore-addons."
+            ),
+        ),
+    ] = None,
+    ignore_core_addons: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-core-addons",
+            help=(
+                "Passed to click-odoo-update --ignore-core-addons. If this option is set, Odoo CE and EE addons "
+                "are not updated. This is normally safe, due the Odoo stable policy."
+            ),
+        ),
+    ] = False,
+    update_all: Annotated[
+        bool,
+        typer.Option(
+            "--update-all",
+            help="Passed to click-odoo-update --update-all. Force a complete upgrade (-u base).",
+        ),
+    ] = False,
+    modules: Annotated[
+        str | None,
+        typer.Option(
+            "-m",
+            "--modules",
+            help=(
+                "Comma-separated list of modules to update by running Odoo directly "
+                "(-u MODULES --stop-after-init), skipping click-odoo-update."
+            ),
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Go through all steps without running any writing/destructive commands.",
+        ),
+    ] = False,
+) -> None:
+    """Update an existing deployment instance."""
+    eff_steps = parse_step_option(steps)
+    eff_skip_steps = parse_step_option(skip_steps)
+    try:
+        validate_step_slugs("--steps", eff_steps, UPDATE_STEPS, allow_all=True)
+        validate_step_slugs("--except", eff_skip_steps, UPDATE_STEPS, allow_all=False)
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
+    cfg = load_config(ctx.obj["config"], instance_name)
+    try:
+        opts = resolve_options(
+            cfg,
+            instance_name,
+            ssh_host=ssh_host,
+            ssh_port=ssh_port,
+            deploy_type=deploy_type.value if deploy_type else None,
+            db=db,
+            repo_subdir=repo_subdir,
+            repo_branch=repo_branch,
+        )
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+    opts["verbose"] = ctx.obj["verbose"]
+    opts["ignore_hooks"] = ignore_hooks
+    opts["ignore_addons"] = ignore_addons
+    opts["ignore_core_addons"] = ignore_core_addons
+    opts["update_all"] = update_all
+    opts["modules"] = modules
+
+    try:
+        host_specs = normalize_hosts(opts.get("ssh_host"), opts.get("ssh_user"))
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if dry_run:
+        typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
+
+    multi_host = len(host_specs) > 1
+    watch_targets: list[tuple[Executor, str, str]] = []
+
+    for i, host_spec in enumerate(host_specs):
+        if multi_host:
+            typer.secho(
+                f"\n=== Host {i + 1}/{len(host_specs)}: {host_spec['host'] or 'localhost'} ===", fg="blue", bold=True
+            )
+
+        try:
+            host_eff_steps, host_eff_skip_steps = resolve_host_steps(
+                host_spec["steps"], "update", eff_steps, eff_skip_steps, UPDATE_STEPS
+            )
+        except ValueError as exc:
+            typer.echo(typer.style(str(exc), fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
+
+        host_opts = dict(opts)
+        host_opts["ssh_host"] = host_spec["host"]
+
+        executor = _perform_update(host_opts, instance_name, host_eff_steps, host_eff_skip_steps, dry_run)
+
+        if watch or host_spec["watch"]:
+            watch_targets.append((executor, opts["type"], instance_name))
+
     if dry_run:
         typer.secho(f"\nDry run complete: instance {instance_name!r} was not updated.", fg="green")
     else:
         typer.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
 
-    if watch:
+    if watch_targets:
         if dry_run:
             typer.secho("Skipping --watch: no service was restarted in dry-run mode.", fg="yellow")
         else:
-            executor.watch_logs(eff_type, instance_name)
+            watch_logs_multi(watch_targets)
