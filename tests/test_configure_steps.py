@@ -151,7 +151,7 @@ def test_step_ensure_postgres_role_only(runner):
 
 
 def test_step_all_runs_every_step_for_odoo(runner):
-    cfg = {"repo_url": "git@example.com:org/myapp.git"}
+    cfg = {"repo_url": "git@example.com:org/myapp.git", "version": "17.0"}
 
     result, mock_exec = _invoke(
         runner,
@@ -168,6 +168,7 @@ def test_step_all_runs_every_step_for_odoo(runner):
     assert any(cmd.startswith("createuser") for cmd in commands)
     assert any("gitaggregate" in cmd for cmd in commands)
     assert any("odoo-venv create" in cmd for cmd in commands)
+    assert any("odoo-config create --version 17.0" in cmd for cmd in commands)
     mock_exec.write_file.assert_called_once()
     assert any("systemctl --user enable --now" in cmd for cmd in commands)
 

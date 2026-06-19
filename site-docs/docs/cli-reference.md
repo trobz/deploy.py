@@ -58,9 +58,10 @@ $ deploy configure [OPTIONS] INSTANCE_NAME [SSH_HOST] [REPO_URL]
 * `-p, --port INTEGER`: SSH port on the remote host.
 * `--repo-subdir TEXT`: Subdirectory within the repo to use as the service root (for monorepos).
 * `--repo-branch TEXT`: Git branch to clone and track (defaults to the repository&#x27;s default branch).
+* `--recreate / --no-recreate`: Re-create existing artifacts (venv, odoo-config, systemd unit) instead of skipping them.  \[default: no-recreate\]
 * `--watch`: Stream service logs with journalctl after a successful configure. Also merge with odoo and click-odoo-update logs if applicable.
-* `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: dir, pg, gitaggregate, venv, unit.  \[default: all\]
-* `--except TEXT`: Comma-separated steps to skip. Available: dir, pg, gitaggregate, venv, unit.
+* `--steps TEXT`: Comma-separated steps to run, or &#x27;all&#x27;. Available: dir, pg, gitaggregate, venv, config, unit.  \[default: all\]
+* `--except TEXT`: Comma-separated steps to skip. Available: dir, pg, gitaggregate, venv, config, unit.
 * `--dry-run`: Go through all steps without running any writing/destructive commands.
 * `--help`: Show this message and exit.
 
@@ -140,3 +141,4 @@ $ deploy status [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `-p, --port INTEGER`: SSH port on the remote host.
 * `--watch`: Stream service logs with journalctl after showing status. Also merge with odoo and click-odoo-update logs if applicable.
 * `--help`: Show this message and exit.
+

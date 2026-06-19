@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import shlex
 from typing import Annotated, Any
 
 import typer
@@ -56,8 +57,11 @@ CONFIGURE_STEPS = {
     "pg": "Ensure postgres role exists",
     "gitaggregate": "Run gitaggregate if needed",
     "venv": "Creating the venv",
+    "config": "Generating Odoo config",
     "unit": "Installing systemd unit",
 }
+
+ODOO_CONFIG_FILENAME = "odoo.conf"
 
 
 def configure(  # noqa: C901
@@ -81,7 +85,7 @@ def configure(  # noqa: C901
     recreate: Annotated[
         bool,
         typer.Option(
-            help="Re-create venv in case it exists. This is useful when you want to update the venv.",
+            help="Re-create existing artifacts (venv, odoo-config, systemd unit) instead of skipping them.",
         ),
     ] = False,
     watch: Annotated[
@@ -245,7 +249,43 @@ def configure(  # noqa: C901
             typer.echo(typer.style(str(exc), fg="red"), err=True)
             raise typer.Exit(code=1) from exc
 
-    # Step 5: Install systemd unit
+    # Step 5: Generate Odoo config via odoo-config on the target host
+    if eff_type == "odoo" and _run_step("config"):
+        conf_dir = f"{instance_path}/config"
+        conf_path = f"{conf_dir}/{ODOO_CONFIG_FILENAME}"
+        conf_exists = _file_exists(executor, conf_path)
+
+        if not conf_exists or recreate:
+            typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
+            version = opts.get("version") or typer.prompt("Target Odoo version", default="19.0")
+
+            overrides: dict[str, Any] = {
+                "db_user": instance_name,
+                "report.url": f"http://{instance_name}:8069",
+                "http_interface": instance_name,
+            }
+            overrides.update(opts.get("config") or {})
+            override_args = " ".join(f"--{key}={shlex.quote(str(value))}" for key, value in overrides.items())
+
+            try:
+                executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
+                if conf_exists:
+                    executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
+                executor.run(
+                    f"odoo-config create --version {shlex.quote(str(version))} -c {conf_path} {override_args}",
+                    dry_run=dry_run,
+                )
+            except ExecutorError as exc:
+                typer.echo(typer.style(str(exc), fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
+
+        else:
+            typer.secho(
+                f"\nConfig {ODOO_CONFIG_FILENAME!r} already exists. Use --recreate to regenerate.",
+                fg="yellow",
+            )
+
+    # Step 6: Install systemd unit
     if _run_step("unit"):
         unit_dir = "$HOME/.config/systemd/user"
         unit_path = f"{unit_dir}/{instance_name}.service"
