@@ -4,8 +4,8 @@ from typing import Annotated, Any
 
 import typer
 
-from trobz_deploy.utils.config import DeployType, load_config, resolve_options
-from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.config import DeployType, load_config, normalize_hosts, resolve_options
+from trobz_deploy.utils.executor import Executor, ExecutorError, watch_logs_multi
 
 
 def _get_unit_line(executor: Executor, instance_name: str) -> str:
@@ -41,11 +41,10 @@ def _get_git_info(executor: Executor, instance_path: str) -> tuple[str, str, str
 def _perform_status(
     opts: dict[str, Any],
     instance_name: str,
-    watch: bool,
-) -> None:
+    host_label: str | None = None,
+) -> Executor:
     eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
-    eff_type: str = opts["type"]
 
     executor = Executor(eff_ssh_host, opts["verbose"], ssh_port=eff_ssh_port)
     home_dir = executor.capture("echo $HOME")
@@ -73,14 +72,15 @@ def _perform_status(
     # Step 4: systemd unit status
     unit_line = _get_unit_line(executor, instance_name)
 
+    if host_label:
+        typer.echo(f"Host:      {host_label}")
     typer.echo(f"Instance:  {instance_name}")
     if has_repo:
         typer.echo(f"Remote:    {remote_url}")
         typer.echo(f"Branch:    {branch} ({commit})")
     typer.echo(f"Unit:      {unit_line}")
 
-    if watch:
-        executor.watch_logs(eff_type, instance_name)
+    return executor
 
 
 def status(
@@ -118,4 +118,27 @@ def status(
         raise typer.Exit(code=1) from exc
     opts["verbose"] = ctx.obj["verbose"]
 
-    _perform_status(opts, instance_name, watch)
+    try:
+        host_specs = normalize_hosts(opts.get("ssh_host"), opts.get("ssh_user"))
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
+    multi_host = len(host_specs) > 1
+    watch_targets: list[tuple[Executor, str, str]] = []
+
+    for i, host_spec in enumerate(host_specs):
+        if multi_host and i:
+            typer.echo()
+
+        host_opts = dict(opts)
+        host_opts["ssh_host"] = host_spec["host"]
+        host_label = (host_spec["host"] or "localhost") if multi_host else None
+
+        executor = _perform_status(host_opts, instance_name, host_label)
+
+        if watch or host_spec["watch"]:
+            watch_targets.append((executor, opts["type"], instance_name))
+
+    if watch_targets:
+        watch_logs_multi(watch_targets)

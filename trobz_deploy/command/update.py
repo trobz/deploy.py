@@ -5,8 +5,16 @@ from typing import Annotated, Any
 import typer
 
 from trobz_deploy.utils.addons import get_addons_path
-from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
-from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.config import (
+    DeployType,
+    load_config,
+    normalize_hosts,
+    parse_step_option,
+    resolve_host_steps,
+    resolve_options,
+    validate_step_slugs,
+)
+from trobz_deploy.utils.executor import Executor, ExecutorError, watch_logs_multi
 from trobz_deploy.utils.venv import get_odoo_version, setup_python_deps, upgrade_package
 
 UPDATE_STEPS = {
@@ -21,9 +29,8 @@ def _perform_update(  # noqa: C901
     instance_name: str,
     eff_steps: list[str],
     eff_skip_steps: list[str],
-    watch: bool,
     dry_run: bool,
-) -> None:
+) -> Executor:
     def _run_step(slug: str) -> bool:
         return ("all" in eff_steps or slug in eff_steps) and slug not in eff_skip_steps
 
@@ -195,14 +202,10 @@ def _perform_update(  # noqa: C901
     run_hooks("post-update")
     run_hooks("post-update-success")
 
-    if watch:
-        if dry_run:
-            typer.secho("Skipping --watch: no service was restarted in dry-run mode.", fg="yellow")
-        else:
-            executor.watch_logs(eff_type, instance_name)
+    return executor
 
 
-def update(
+def update(  # noqa: C901
     ctx: typer.Context,
     instance_name: Annotated[str, typer.Argument()],
     ssh_host: Annotated[str | None, typer.Argument()] = None,
@@ -327,12 +330,47 @@ def update(
     opts["update_all"] = update_all
     opts["modules"] = modules
 
+    try:
+        host_specs = normalize_hosts(opts.get("ssh_host"), opts.get("ssh_user"))
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
+        raise typer.Exit(code=1) from exc
+
     if dry_run:
         typer.secho("\nDry run: no writing/destructive commands will be executed.", fg="cyan")
 
-    _perform_update(opts, instance_name, eff_steps, eff_skip_steps, watch, dry_run)
+    multi_host = len(host_specs) > 1
+    watch_targets: list[tuple[Executor, str, str]] = []
+
+    for i, host_spec in enumerate(host_specs):
+        if multi_host:
+            typer.secho(
+                f"\n=== Host {i + 1}/{len(host_specs)}: {host_spec['host'] or 'localhost'} ===", fg="blue", bold=True
+            )
+
+        try:
+            host_eff_steps, host_eff_skip_steps = resolve_host_steps(
+                host_spec["steps"], "update", eff_steps, eff_skip_steps, UPDATE_STEPS
+            )
+        except ValueError as exc:
+            typer.echo(typer.style(str(exc), fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
+
+        host_opts = dict(opts)
+        host_opts["ssh_host"] = host_spec["host"]
+
+        executor = _perform_update(host_opts, instance_name, host_eff_steps, host_eff_skip_steps, dry_run)
+
+        if watch or host_spec["watch"]:
+            watch_targets.append((executor, opts["type"], instance_name))
 
     if dry_run:
         typer.secho(f"\nDry run complete: instance {instance_name!r} was not updated.", fg="green")
     else:
         typer.secho(f"\nInstance {instance_name!r} updated successfully.", fg="green")
+
+    if watch_targets:
+        if dry_run:
+            typer.secho("Skipping --watch: no service was restarted in dry-run mode.", fg="yellow")
+        else:
+            watch_logs_multi(watch_targets)

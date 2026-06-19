@@ -4,8 +4,8 @@ from typing import Annotated
 
 import typer
 
-from trobz_deploy.utils.config import DeployType, load_config, resolve_options
-from trobz_deploy.utils.executor import Executor, ExecutorError
+from trobz_deploy.utils.config import DeployType, load_config, normalize_hosts, resolve_options
+from trobz_deploy.utils.executor import Executor, ExecutorError, watch_logs_multi
 
 
 def restart(
@@ -42,20 +42,36 @@ def restart(
         typer.echo(typer.style(str(exc), fg="red"), err=True)
         raise typer.Exit(code=1) from exc
 
-    eff_ssh_host: str | None = opts.get("ssh_host")
     eff_ssh_port: int | None = opts.get("ssh_port")
-    eff_type: str = opts["type"]
 
-    executor = Executor(eff_ssh_host, ctx.obj["verbose"], ssh_port=eff_ssh_port)
-
-    typer.secho(f"\nRestarting {instance_name!r}…", fg="green")
     try:
-        executor.run(f"systemctl --user restart {instance_name}")
-    except ExecutorError as exc:
-        typer.echo(typer.style(f"Restart failed: {exc}", fg="red"), err=True)
+        host_specs = normalize_hosts(opts.get("ssh_host"), opts.get("ssh_user"))
+    except ValueError as exc:
+        typer.echo(typer.style(str(exc), fg="red"), err=True)
         raise typer.Exit(code=1) from exc
 
-    typer.secho(f"\nInstance {instance_name!r} restarted.", fg="green")
+    multi_host = len(host_specs) > 1
+    watch_targets: list[tuple[Executor, str, str]] = []
 
-    if watch:
-        executor.watch_logs(eff_type, instance_name)
+    for i, host_spec in enumerate(host_specs):
+        if multi_host:
+            typer.secho(
+                f"\n=== Host {i + 1}/{len(host_specs)}: {host_spec['host'] or 'localhost'} ===", fg="blue", bold=True
+            )
+
+        executor = Executor(host_spec["host"], ctx.obj["verbose"], ssh_port=eff_ssh_port)
+
+        typer.secho(f"\nRestarting {instance_name!r}…", fg="green")
+        try:
+            executor.run(f"systemctl --user restart {instance_name}")
+        except ExecutorError as exc:
+            typer.echo(typer.style(f"Restart failed: {exc}", fg="red"), err=True)
+            raise typer.Exit(code=1) from exc
+
+        typer.secho(f"\nInstance {instance_name!r} restarted.", fg="green")
+
+        if watch or host_spec["watch"]:
+            watch_targets.append((executor, opts["type"], instance_name))
+
+    if watch_targets:
+        watch_logs_multi(watch_targets)

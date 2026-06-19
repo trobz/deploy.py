@@ -98,7 +98,7 @@ deploy [--config FILE] configure <instance_name> [<ssh_host>] [<repo_url>] [--ty
 | Argument        | Required without config | Description                                                                  |
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Logical name for the instance (used for paths and service name)             |
-| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH. In `deploy.yml` only, may instead be a list of hosts — see **Multiple Hosts** below |
 | `repo_url`      | If not in config       | Git repository URL (e.g. `git@github.com:org/repo.git`)                     |
 
 **Options**
@@ -122,7 +122,9 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 (connecting) always runs regardless of `--steps`/`--except`.
 
 1. **Connect** — if `ssh_host` is set and is not `localhost`, open an SSH connection.
-   Otherwise all subsequent commands run as local subprocesses.
+   Otherwise all subsequent commands run as local subprocesses. If `ssh_host` is a list
+   (`deploy.yml` only), steps 1 onward repeat for each host in list order — see
+   **Multiple Hosts** below.
 
 2. **`set-up-instance-dir`** — set up `~/<instance_name>` on the target host:
    - **`python` with `requirements`** (package mode): create the directory with `mkdir -p`.
@@ -237,7 +239,7 @@ deploy [--config FILE] update <instance_name> [<ssh_host>] [-p <ssh_port>] [--ty
 | Argument        | Required without config | Description                                                                  |
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Name of the previously configured instance                                  |
-| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH. In `deploy.yml` only, may instead be a list of hosts — see **Multiple Hosts** below |
 
 **Options**
 
@@ -302,7 +304,9 @@ Steps 5–7 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 and 8–9 always run regardless of `--steps`/`--except`.
 
 1. **Connect** — if `ssh_host` is set and is not `localhost`, open an SSH connection.
-   Otherwise all subsequent commands run as local subprocesses.
+   Otherwise all subsequent commands run as local subprocesses. If `ssh_host` is a list
+   (`deploy.yml` only), steps 1 onward repeat for each host in list order — see
+   **Multiple Hosts** below.
 
 2. **Run `pre-update` hooks** — execute all `pre-update` commands in order (non-blocking).
 
@@ -397,7 +401,7 @@ deploy [--config FILE] status <instance_name> [<ssh_host>] [-p <ssh_port>]
 | Argument        | Required without config | Description                                                                  |
 |----------------|------------------------|------------------------------------------------------------------------------|
 | `instance_name` | Always                 | Name of the previously configured instance                                  |
-| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH             |
+| `ssh_host`      | If not in config       | SSH target, or `localhost` / omit to deploy locally without SSH. In `deploy.yml` only, may instead be a list of hosts — see **Multiple Hosts** below |
 | `ssh_port`      | If not in config       | SSH port, default 22                                                        |
 
 **Output**
@@ -411,10 +415,17 @@ Branch:    main (abc1234)
 Unit:      active (running) since 2026-03-09 08:12:03
 ```
 
+When `ssh_host` resolves to more than one host (`deploy.yml` list form with 2+ entries), this
+block is printed once per host, in list order, each preceded by a `Host: <hostname>` line and
+separated from the next by a blank line. A single-entry list is treated like a plain string and
+prints the block above with no `Host:` line.
+
 **Steps (executed in order)**
 
 1. **Connect** — if `ssh_host` is set and is not `localhost`, open an SSH connection.
-   Otherwise all subsequent commands run as local subprocesses.
+   Otherwise all subsequent commands run as local subprocesses. If `ssh_host` is a list
+   (`deploy.yml` only), steps 1 onward repeat for each host in list order — see
+   **Multiple Hosts** below.
 
 2. **Git info** — inside `~/<instance_name>`, run:
    - `git remote get-url origin` → remote URL
@@ -484,6 +495,75 @@ odoo-myproject-production:
 The config file is resolved **locally** (on the machine running `deploy`), not on the remote host.
 It is **not** committed to the project repository — it lives outside the deployment folder, typically
 alongside the operator's other deployment scripts or in a private configuration repository.
+
+### Multiple Hosts (`ssh_host` as a list)
+
+In `deploy.yml`, `ssh_host` may be a list instead of a single string, so that `configure`,
+`update`, and `status` can each be rolled out across several hosts under one `instance_name`.
+The CLI positional `<ssh_host>` argument always takes a single value — list form is only
+available via the config file.
+
+```yaml
+# deploy.yml
+openerp-myproject-production:
+  repo_url: git@github.com:org/repo.git
+  db: myproject_production
+  ssh_host:
+    - host2.example.com:
+        watch: true
+        steps:
+          update: pull, venv, db
+    - host1.example.com:
+        watch: true
+        steps:
+          update: pull, venv
+  ssh_port: 22
+  ssh_user: openerp
+```
+
+- Each list entry is a single-key mapping: the key is the hostname, the value is an optional
+  mapping of per-host overrides (`watch`, `steps`). A host with no overrides can be written as a
+  bare string instead of a mapping.
+- `ssh_user` is the SSH user shared by every bare hostname in the list, so individual entries
+  don't need to repeat `user@host`. An entry that already embeds a user (`user@host`) ignores
+  `ssh_user`. `ssh_user` is ignored when `ssh_host` is a single string — embed the user in that
+  string instead, as today.
+- `ssh_port` and every other instance-level setting (`type`, `db`, `hooks`, …) stay shared across
+  all hosts in the list; there is no per-host override for them.
+
+**Per-host `steps`** — keyed by command name (`configure` or `update`; `status` has no
+`--steps`/`--except` option and ignores this key). The value uses the same comma-separated slugs
+as that command's `--steps`/`--except` (e.g. `pull`, `venv`, `db` for `update`; see each
+command's **Steps** section). It becomes that host's effective `--steps` for the matching
+command, with no `--except` for that host. `--steps`/`--except` passed on the CLI still wins
+over it for every host, per the usual CLI > config > default precedence — a host's `steps` entry
+only takes effect when the CLI was left at its defaults (no `--steps`/`--except`). A host with no
+entry for the current command name runs with the default (`all`).
+
+**Per-host `watch`** — same meaning as the `--watch` flag, scoped to that host. The CLI
+`--watch` flag, when passed, forces every host to be watched, overriding any per-host
+`watch: false`.
+
+**Execution order** — hosts are processed **sequentially, in list order**: `deploy` connects to
+the first host, runs the selected steps/hooks to completion, then moves to the next. If a host
+fails, the command aborts immediately with that host's exit code — later hosts are not attempted.
+This lets one host own a step that must not run twice (e.g. `db` in the example above only runs
+on `host2.example.com`; `host1.example.com` only refreshes code and the venv), and ensures the
+database has migrated before other hosts pick up the new code that depends on it. For `configure`
+and `update`, when there is more than one host, each host's turn is announced with a banner before
+its steps run:
+
+```
+=== Host 1/2: host2.example.com ===
+```
+
+A single-entry list runs exactly like a plain string — no banner, no `Host:` line, identical
+output to today.
+
+**Watching multiple hosts** — when more than one host ends up with `watch` enabled (via the CLI
+flag or per-host config), their `journalctl` streams (and merged odoo / click-odoo-update logs
+where applicable) are interleaved as they arrive and each line is prefixed with a colored
+`[hostname]` label, so output from concurrently-tailed hosts stays distinguishable.
 
 ---
 

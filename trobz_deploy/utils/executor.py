@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import subprocess
+import threading
+from collections.abc import Iterator
 
 import typer
 
@@ -132,7 +134,18 @@ class Executor:
         written by ``click-odoo-update``.  Any streams found are tailed concurrently.
         """
         typer.secho("\nWatching service logs (Ctrl+C to stop)…", fg="cyan")
+        cmd = self.build_watch_command(eff_type, instance_name)
+        try:
+            self.stream(cmd)
+        except KeyboardInterrupt:
+            typer.echo()
 
+    def build_watch_command(self, eff_type: str, instance_name: str) -> str:
+        """Build the merged journalctl/log-tail shell command used by ``watch_logs``.
+
+        Exposed separately so multiple hosts can be watched concurrently via
+        ``merge_stream_lines`` instead of each blocking the terminal in turn.
+        """
         log_file: str | None = None
         upgrade_log_file: str | None = None
         if eff_type == "odoo":
@@ -169,11 +182,31 @@ class Executor:
             typer.secho(f"Merging with upgrade log: {upgrade_log_file}", fg="cyan")
             streams.append(self._colorize(f"tail -f {upgrade_log_file}", "33"))  # yellow
 
-        try:
-            cmd = f"( {' & '.join(streams)} & wait )" if len(streams) > 1 else streams[0]
-            self.stream(cmd)
-        except KeyboardInterrupt:
-            typer.echo()
+        cmd = f"( {' & '.join(streams)} & wait )" if len(streams) > 1 else streams[0]
+        return cmd
+
+    def stream_lines(self, command: str, cwd: str | None = None) -> Iterator[str]:
+        """Run a long-lived command and yield its stdout one line at a time.
+
+        Useful for commands like ``tail -f`` where output must be processed
+        incrementally rather than printed wholesale to the terminal.
+        """
+        argv = self._build_argv(command, cwd)
+        is_remote = isinstance(argv, list)
+        if self.verbose:
+            display = argv[-1] if is_remote else command
+            typer.echo(f"$ {display}", err=True)
+        with subprocess.Popen(  # noqa: S603
+            argv,
+            shell=not is_remote,
+            cwd=cwd if not is_remote else None,
+            stdout=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        ) as proc:
+            assert proc.stdout is not None  # noqa: S101
+            for line in proc.stdout:
+                yield line.rstrip("\n")
 
     def stream(self, command: str, cwd: str | None = None) -> None:
         """Run a long-lived streaming command (e.g. journalctl -f).
@@ -206,3 +239,62 @@ class Executor:
         self.verbose = False
         self.run(f"echo '{b64}' | base64 -d > {remote_path}")
         self.verbose = verbose
+
+
+# ANSI color cycle for merge_stream_lines labels (cyan, green, yellow, magenta, blue)
+_LABEL_COLORS = ["36", "32", "33", "35", "34"]
+
+
+def merge_stream_lines(streams: list[tuple[Executor, str]], prefix: bool = True) -> None:
+    """Stream output from multiple (executor, command) pairs concurrently.
+
+    Each stream runs in its own thread. Lines are printed as they arrive,
+    optionally prefixed with a colored ``[host]`` label so you can tell them apart.
+    Blocks until all streams end or until a KeyboardInterrupt.
+    """
+    lock = threading.Lock()
+
+    def _pump(executor: Executor, command: str, label: str, color: str) -> None:
+        colored_label = f"\x1b[{color}m[{label}]\x1b[0m"
+        try:
+            for line in executor.stream_lines(command):
+                with lock:
+                    typer.echo(f"{colored_label} {line}" if prefix else line)
+        except Exception as e:
+            typer.secho(f"{colored_label} Exception in _pump {e}", fg="red")
+
+    threads: list[threading.Thread] = []
+    for i, (executor, command) in enumerate(streams):
+        label = executor.ssh_host or "localhost"
+        color = _LABEL_COLORS[i % len(_LABEL_COLORS)]
+        t = threading.Thread(target=_pump, args=(executor, command, label, color), daemon=True)
+        t.start()
+        threads.append(t)
+
+    try:
+        for t in threads:
+            t.join()
+    except KeyboardInterrupt:
+        typer.echo()
+
+
+def watch_logs_multi(targets: list[tuple[Executor, str, str]]) -> None:
+    """Watch logs for one or more ``(executor, eff_type, instance_name)`` targets.
+
+    A single target behaves exactly like ``Executor.watch_logs``. With more than one,
+    each host's merged journalctl/log stream is tailed concurrently and interleaved
+    with a colored ``[host]`` label via ``merge_stream_lines``.
+    """
+    if not targets:
+        return
+    if len(targets) == 1:
+        executor, eff_type, instance_name = targets[0]
+        executor.watch_logs(eff_type, instance_name)
+        return
+
+    typer.secho("\nWatching service logs for multiple hosts (Ctrl+C to stop)…", fg="cyan")
+    streams = [
+        (executor, executor.build_watch_command(eff_type, instance_name))
+        for executor, eff_type, instance_name in targets
+    ]
+    merge_stream_lines(streams)
