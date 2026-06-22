@@ -141,4 +141,3 @@ $ deploy status [OPTIONS] INSTANCE_NAME [SSH_HOST]
 * `-p, --port INTEGER`: SSH port on the remote host.
 * `--watch`: Stream service logs with journalctl after showing status. Also merge with odoo and click-odoo-update logs if applicable.
 * `--help`: Show this message and exit.
-

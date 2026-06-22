@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 import shlex
 from typing import Annotated, Any
@@ -62,6 +63,32 @@ CONFIGURE_STEPS = {
 }
 
 ODOO_CONFIG_FILENAME = "odoo.conf"
+
+# Odoo instance types that map to an odoo-config --preset (see odoo-config overlay.toml).
+# The other types (demo, hotfix, test, training) carry no preset.
+INSTANCE_PRESETS = ("production", "staging", "integration")
+
+
+def _detect_preset(instance_name: str) -> str | None:
+    """Derive the odoo-config --preset from the instance name (e.g. acme-staging → staging).
+
+    Instance names are dash-separated (e.g. ``openerp-project-integration``).
+    """
+    tokens = set(instance_name.lower().split("-"))
+    return next((p for p in INSTANCE_PRESETS if p in tokens), None)
+
+
+def _detect_version(executor: Executor, service_path: str, *, dry_run: bool = False) -> str:
+    """Read the Odoo version from ``odoo-addons-path --format=json`` in the codebase, else prompt."""
+    # OSError covers a missing service_path on the local executor (subprocess cwd= raises
+    # before the command runs); the remote executor degrades to a non-zero ExecutorError.
+    try:
+        out = executor.capture("odoo-addons-path -v --format=json", cwd=service_path, dry_run=dry_run)
+        detected = json.loads(out).get("version", "") if out else ""
+    except (ExecutorError, OSError, json.JSONDecodeError):
+        detected = ""
+
+    return detected or typer.prompt("Target Odoo version", default="19.0")
 
 
 def configure(  # noqa: C901
@@ -257,22 +284,27 @@ def configure(  # noqa: C901
 
         if not conf_exists or recreate:
             typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
-            version = opts.get("version") or typer.prompt("Target Odoo version", default="19.0")
+            version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
                 "report.url": f"http://{instance_name}:8069",
                 "http_interface": instance_name,
+                "admin_passwd": secrets.token_urlsafe(24),
             }
             overrides.update(opts.get("config") or {})
             override_args = " ".join(f"--{key}={shlex.quote(str(value))}" for key, value in overrides.items())
+
+            preset = opts.get("preset") or _detect_preset(instance_name)
+            preset_arg = f" --preset {shlex.quote(preset)}" if preset else ""
 
             try:
                 executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
                 if conf_exists:
                     executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
                 executor.run(
-                    f"odoo-config create --version {shlex.quote(str(version))} -c {conf_path} {override_args}",
+                    f"odoo-config create --version {shlex.quote(str(version))}{preset_arg} "
+                    f"-c {conf_path} {override_args}",
                     dry_run=dry_run,
                 )
             except ExecutorError as exc:

@@ -17,7 +17,7 @@ def runner():
 def _executor_mock():
     mock = MagicMock()
 
-    def capture_side_effect(cmd, cwd=None):
+    def capture_side_effect(cmd, cwd=None, dry_run=False):
         if cmd == "echo $HOME":
             return "/home/deploy"
         return ""
