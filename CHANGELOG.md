@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.23.0 (2026-06-29)
+
+### Documentation
+
+- **configuration**: Document the config and env deploy.yml keys
+  ([`627887c`](https://github.com/trobz/deploy.py/commit/627887c2ed201ca3e7fdf7176a5a7540faada03d))
+
+### Features
+
+- **configure**: Generate config/server.env with default and override env vars
+  ([`2a265d9`](https://github.com/trobz/deploy.py/commit/2a265d9cc2f1ebe7233ad0482599d10ef62aed04))
+
+### Refactoring
+
+- **configure**: Make server.env generation its own step
+  ([`4254ea8`](https://github.com/trobz/deploy.py/commit/4254ea8af901d16adeacff70a6bd569fcb28edb4))
+
+
 ## v0.22.0 (2026-06-17)
 
 ### Features
