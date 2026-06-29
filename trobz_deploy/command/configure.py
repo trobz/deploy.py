@@ -64,6 +64,21 @@ CONFIGURE_STEPS = {
 
 ODOO_CONFIG_FILENAME = "odoo.conf"
 
+# Default env vars written to config/server.env for every odoo instance.
+# Single-thread the BLAS/OpenMP backends so workers don't oversubscribe cores.
+DEFAULT_SERVER_ENV: dict[str, Any] = {
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "NUMEXPR_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+}
+
+
+def _render_server_env(env: dict[str, Any]) -> str:
+    """Render an ``env`` dict as ``KEY=value`` lines for config/server.env."""
+    return "".join(f"{key}={value}\n" for key, value in env.items())
+
+
 # Odoo instance types that map to an odoo-config --preset (see odoo-config overlay.toml).
 # The other types (demo, hotfix, test, training) carry no preset.
 INSTANCE_PRESETS = ("production", "staging", "integration")
@@ -278,6 +293,7 @@ def configure(  # noqa: C901
 
     # Step 5: Generate Odoo config via odoo-config on the target host
     if eff_type == "odoo" and _run_step("config"):
+        # 5.1: config/odoo.conf
         conf_dir = f"{instance_path}/config"
         conf_path = f"{conf_dir}/{ODOO_CONFIG_FILENAME}"
         conf_exists = _file_exists(executor, conf_path)
@@ -314,6 +330,32 @@ def configure(  # noqa: C901
         else:
             typer.secho(
                 f"\nConfig {ODOO_CONFIG_FILENAME!r} already exists. Use --recreate to regenerate.",
+                fg="yellow",
+            )
+
+        # 5.2: config/server.env — default thread limits, enriched by deploy.yml `env`.
+        env_path = f"{conf_dir}/server.env"
+        env_exists = _file_exists(executor, env_path)
+
+        if not env_exists or recreate:
+            typer.secho("\nGenerating server.env…", fg="green")
+            server_env = {**DEFAULT_SERVER_ENV, **(opts.get("env") or {})}
+
+            try:
+                executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
+
+                if env_exists:
+                    executor.run(f"mv {env_path} {env_path}.bak", dry_run=dry_run)
+
+                executor.write_file(_render_server_env(server_env), env_path, dry_run=dry_run)
+
+            except ExecutorError as exc:
+                typer.echo(typer.style(str(exc), fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
+
+        else:
+            typer.secho(
+                "\nserver.env already exists. Use --recreate to regenerate.",
                 fg="yellow",
             )
 
