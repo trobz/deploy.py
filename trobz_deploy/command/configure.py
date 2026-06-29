@@ -59,10 +59,26 @@ CONFIGURE_STEPS = {
     "gitaggregate": "Run gitaggregate if needed",
     "venv": "Creating the venv",
     "config": "Generating Odoo config",
+    "env": "Generating server.env",
     "unit": "Installing systemd unit",
 }
 
 ODOO_CONFIG_FILENAME = "odoo.conf"
+
+# Default env vars written to config/server.env for every odoo instance.
+# Single-thread the BLAS/OpenMP backends so workers don't oversubscribe cores.
+DEFAULT_SERVER_ENV: dict[str, Any] = {
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "NUMEXPR_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+}
+
+
+def _render_server_env(env: dict[str, Any]) -> str:
+    """Render an ``env`` dict as ``KEY=value`` lines for config/server.env."""
+    return "".join(f"{key}={value}\n" for key, value in env.items())
+
 
 # Odoo instance types that map to an odoo-config --preset (see odoo-config overlay.toml).
 # The other types (demo, hotfix, test, training) carry no preset.
@@ -317,7 +333,35 @@ def configure(  # noqa: C901
                 fg="yellow",
             )
 
-    # Step 6: Install systemd unit
+    # Step 6: Generate config/server.env — default thread limits, enriched by deploy.yml `env`.
+    if eff_type == "odoo" and _run_step("env"):
+        conf_dir = f"{instance_path}/config"
+        env_path = f"{conf_dir}/server.env"
+        env_exists = _file_exists(executor, env_path)
+
+        if not env_exists or recreate:
+            typer.secho(f"\n{CONFIGURE_STEPS['env']}…", fg="green")
+            server_env = {**DEFAULT_SERVER_ENV, **(opts.get("env") or {})}
+
+            try:
+                executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
+
+                if env_exists:
+                    executor.run(f"mv {env_path} {env_path}.bak", dry_run=dry_run)
+
+                executor.write_file(_render_server_env(server_env), env_path, dry_run=dry_run)
+
+            except ExecutorError as exc:
+                typer.echo(typer.style(str(exc), fg="red"), err=True)
+                raise typer.Exit(code=1) from exc
+
+        else:
+            typer.secho(
+                "\nserver.env already exists. Use --recreate to regenerate.",
+                fg="yellow",
+            )
+
+    # Step 7: Install systemd unit
     if _run_step("unit"):
         unit_dir = "$HOME/.config/systemd/user"
         unit_path = f"{unit_dir}/{instance_name}.service"

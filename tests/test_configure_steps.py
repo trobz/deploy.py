@@ -169,7 +169,10 @@ def test_step_all_runs_every_step_for_odoo(runner):
     assert any("gitaggregate" in cmd for cmd in commands)
     assert any("odoo-venv create" in cmd for cmd in commands)
     assert any("odoo-config create --version 17.0" in cmd for cmd in commands)
-    mock_exec.write_file.assert_called_once()
+    # Two file writes: config/server.env and the systemd unit.
+    written = [call.args[0] for call in mock_exec.write_file.call_args_list]
+    assert mock_exec.write_file.call_count == 2
+    assert any("OMP_NUM_THREADS=1" in content for content in written)
     assert any("systemctl --user enable --now" in cmd for cmd in commands)
 
 

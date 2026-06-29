@@ -41,6 +41,17 @@ odoo-myproject-production:
     - myproject_staging
     - myproject_integration
 
+  # Odoo config overrides — written to config/odoo.conf by `configure`
+  config:
+    workers: 4
+    limit_time_cpu: 600
+
+  # Environment variables — written to config/server.env by `configure`.
+  # Merged over the built-in thread-limit defaults (the value here wins).
+  env:
+    ODOO_SESSION_REDIS: 1
+    ODOO_SESSION_REDIS_HOST: localhost
+
   # python / service only
   exec_start: myapp.main:app              # module path for python; verbatim for service
   build: npm ci && npm run build          # service only
@@ -74,6 +85,8 @@ odoo-myproject-production:
 | `db` | string or list of string | `update` | Target database name (Odoo only). Can be a list for multiple names. |
 | `exec_start` | string | `configure` | Entry point for python/service systemd unit. |
 | `build` | string | `configure`, `update` | Build command for `service` type. |
+| `config` | mapping | `configure` | Odoo config overrides written to `config/odoo.conf` (Odoo only). |
+| `env` | mapping | `configure` | Environment variables written to `config/server.env`, merged over the built-in thread-limit defaults (Odoo only). |
 | `hooks` | mapping | `update` | Lifecycle hooks — see [Hooks](hooks.md). |
 
 ## Multiple instances
