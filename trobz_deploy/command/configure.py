@@ -33,24 +33,42 @@ def _postgres_user_exists(executor: Executor, instance_name: str) -> bool:
     return result.strip() == "1"
 
 
-def _ensure_postgres_user(executor: Executor, instance_name: str, dry_run: bool = False) -> None:
-    """Create a Postgres superuser role named after the instance, if it doesn't already exist."""
-    if _postgres_user_exists(executor, instance_name):
+def _ensure_postgres_user(
+    executor: Executor,
+    instance_name: str,
+    db_user: str | None = None,
+    password: str | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Create a Postgres superuser role for the instance, if it doesn't already exist.
+
+    The role name is *db_user* when given (the db_user from deploy.yml, so it
+    matches odoo.conf), else the instance name. Uses *password* when given,
+    otherwise generates a random one and prints it once.
+    """
+    role = db_user or instance_name
+    if _postgres_user_exists(executor, role):
         return
 
     if dry_run:
-        typer.secho(f"\n[dry-run] Would create Postgres user {instance_name!r}…", fg="cyan")
+        typer.secho(f"\n[dry-run] Would create Postgres user {role!r}…", fg="cyan")
         return
 
-    typer.secho(f"\nCreating Postgres user {instance_name!r}…", fg="green")
-    password = secrets.token_urlsafe(16)
-    executor.run(f"createuser --no-createrole --superuser {instance_name}")
-    executor.run(f'psql -d postgres -c "ALTER ROLE \\"{instance_name}\\" WITH PASSWORD \'{password}\'"')
-    typer.secho(
-        f"Created Postgres user {instance_name!r} with password:\n  {password}\n"
-        "Save this password now — it will not be shown again.",
-        fg="yellow",
-    )
+    typer.secho(f"\nCreating Postgres user {role!r}…", fg="green")
+
+    provided = bool(password and password.strip())
+    pw = password if provided else secrets.token_urlsafe(16)
+    generated = not provided
+
+    executor.run(f"createuser --no-createrole --superuser {role}")
+    executor.run(f'psql -d postgres -c "ALTER ROLE \\"{role}\\" WITH PASSWORD \'{pw}\'"')
+
+    if generated:
+        typer.secho(
+            f"Created Postgres user {role!r} with password:\n  {pw}\n"
+            "Save this password now — it will not be shown again.",
+            fg="yellow",
+        )
 
 
 CONFIGURE_STEPS = {
@@ -246,8 +264,15 @@ def configure(  # noqa: C901
 
     # Step 3b: Ensure Postgres role exists
     if eff_type == "odoo" and _run_step("pg"):
+        cfg_config = opts.get("config") or {}
         try:
-            _ensure_postgres_user(executor, instance_name, dry_run=dry_run)
+            _ensure_postgres_user(
+                executor,
+                instance_name,
+                db_user=cfg_config.get("db_user"),
+                password=cfg_config.get("db_password"),
+                dry_run=dry_run,
+            )
         except ExecutorError as exc:
             typer.echo(typer.style(str(exc), fg="red"), err=True)
             raise typer.Exit(code=1) from exc
@@ -304,6 +329,7 @@ def configure(  # noqa: C901
                     executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
                 executor.run(
                     f"odoo-config create --version {shlex.quote(str(version))}{preset_arg} "
+                    f"--instance-dir={shlex.quote(instance_path)} "
                     f"-c {conf_path} {override_args}",
                     dry_run=dry_run,
                 )
