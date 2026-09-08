@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.23.2 (2026-09-08)
+
+### Bug Fixes
+
+- Pin installed deploy CLI to the invoking action ref
+  ([`46fe106`](https://github.com/trobz/deploy.py/commit/46fe1064352f7c886090da2e61b26a60405a56b1))
+
+
 ## v0.23.1 (2026-06-29)
 
 ### Bug Fixes
