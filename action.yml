@@ -100,7 +100,9 @@ runs:
 
     - name: Install deploy
       shell: bash
-      run: uv tool install "git+https://github.com/trobz/deploy.py.git"
+      run: |
+        ref="${{ github.action_ref }}"
+        uv tool install "git+https://github.com/trobz/deploy.py.git${ref:+@$ref}"
 
     - name: Deploy
       shell: bash
