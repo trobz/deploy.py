@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.23.3 (2026-09-09)
+
+### Bug Fixes
+
+- Replace CLAUDE.md symlink with an @AGENTS.md import
+  ([`c09a3ae`](https://github.com/trobz/deploy.py/commit/c09a3ae1ce20fa23908e2b06c664323cd7c73e87))
+
+
 ## v0.23.2 (2026-09-08)
 
 ### Bug Fixes
