@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 
+from trobz_deploy.utils.config import render_cli_args
 from trobz_deploy.utils.executor import Executor, ExecutorError
 
 
@@ -26,19 +29,29 @@ def _show_venv_exists() -> None:
     typer.secho(msg, fg="yellow")
 
 
-def setup_odoo_venv(executor: Executor, instance_path: str, recreate: bool = False, dry_run: bool = False) -> None:
-    """Create or update an Odoo virtual environment using ``odoo-venv``."""
+def setup_odoo_venv(
+    executor: Executor,
+    instance_path: str,
+    recreate: bool = False,
+    dry_run: bool = False,
+    extra_args: dict[str, Any] | None = None,
+) -> None:
+    """Create or update an Odoo virtual environment using ``odoo-venv``.
+
+    *extra_args* are extra ``odoo-venv create`` options (``tools.odoo-venv`` in
+    deploy.yml). They are merged over the built-in ``--project-dir``/``--preset``
+    defaults, so each option is emitted once: a matching key overrides the default,
+    and a ``false``/null value drops it from the command.
+    """
     if _venv_exists(executor, instance_path):
         if recreate:
             _backup_venv(executor, instance_path, dry_run=dry_run)
         else:
             _show_venv_exists()
             return
-    executor.run(
-        f"odoo-venv create --project-dir {instance_path} --preset project",
-        cwd=instance_path,
-        dry_run=dry_run,
-    )
+    args: dict[str, Any] = {"project-dir": instance_path, "preset": "project"}
+    args.update(extra_args or {})
+    executor.run(f"odoo-venv create {render_cli_args(args)}", cwd=instance_path, dry_run=dry_run)
 
 
 def setup_python_venv(executor: Executor, instance_path: str, recreate: bool = False, dry_run: bool = False) -> None:

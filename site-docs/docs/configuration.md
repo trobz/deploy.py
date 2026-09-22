@@ -46,6 +46,23 @@ odoo-myproject-production:
     workers: 4
     limit_time_cpu: 600
 
+  # Command-line options for the tools `configure` runs. Each key under a tool is
+  # rendered as `--key value` and merged over the options deploy passes by default,
+  # so every option is passed exactly once. A matching key overrides the default,
+  # `true` renders a bare flag, `false` / null drops the option, and a list repeats it.
+  # Note the difference from `config:` above: that sets values *inside* odoo.conf,
+  # while `tools.odoo-config` controls *how odoo-config is invoked*.
+  tools:
+    odoo-venv:                          # → odoo-venv create
+      odoo-dir: /opt/odoo/code/odoo/odoo/20.0/
+      addons-path: /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0
+    odoo-config:                        # → odoo-config create
+      enterprise: true
+      output-format: all
+      from:
+        - /opt/odoo/shared/base.conf
+
+
   # Environment variables — written to config/server.env by `configure`.
   # Merged over the built-in thread-limit defaults (the value here wins).
   env:
@@ -86,8 +103,46 @@ odoo-myproject-production:
 | `exec_start` | string | `configure` | Entry point for python/service systemd unit. |
 | `build` | string | `configure`, `update` | Build command for `service` type. |
 | `config` | mapping | `configure` | Odoo config overrides written to `config/odoo.conf` (Odoo only). |
+| `tools` | mapping | `configure` | Command-line options for the tools the steps run, keyed by tool (Odoo only) — see [Tool options](#tool-options). |
 | `env` | mapping | `configure` | Environment variables written to `config/server.env`, merged over the built-in thread-limit defaults (Odoo only). |
 | `hooks` | mapping | `update` | Lifecycle hooks — see [Hooks](hooks.md). |
+
+## Tool options
+
+The `configure` steps shell out to `odoo-venv` and `odoo-config`. The `tools` section sets
+command-line options for them, keyed by tool:
+
+| Tool key | Command | Options deploy passes by default |
+|----------|---------|----------------------------------|
+| `odoo-venv` | `odoo-venv create` | `--project-dir`, `--preset project` |
+| `odoo-config` | `odoo-config create` | `--version`, `--preset`, `--instance-dir`, `--config` |
+
+Your keys are merged over those defaults, so each option is passed exactly once:
+
+- a key matching a default **overrides** it, keeping its position
+- `true` renders a bare flag — `enterprise: true` → `--enterprise`
+- `false` or null **drops** the option, including a default
+- a list **repeats** the option — `from: [a, b]` → `--from a --from b`
+- values are shell-quoted
+
+```yaml
+odoo-myproject-staging:
+  tools:
+    odoo-venv:
+      odoo-dir: /opt/odoo/code/odoo/odoo/20.0/
+      addons-path: /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0
+    odoo-config:
+      enterprise: true
+      version: 20.0
+```
+
+`tools.odoo-config.version` also short-circuits version detection, so `configure` will not
+probe the codebase or prompt for it. It takes precedence over the top-level `version` and
+`preset` keys, which keep working.
+
+Do not confuse `tools.odoo-config` with `config`: the former controls **how odoo-config is
+invoked**, the latter sets **values written into odoo.conf**. `odoo-config` treats any option
+it does not recognise as an odoo.conf value, so a CLI flag placed under `config` will not work.
 
 ## Multiple instances
 

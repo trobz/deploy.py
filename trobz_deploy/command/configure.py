@@ -7,7 +7,15 @@ from typing import Annotated, Any
 
 import typer
 
-from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
+from trobz_deploy.utils.config import (
+    DeployType,
+    load_config,
+    parse_step_option,
+    render_cli_args,
+    resolve_options,
+    tool_args,
+    validate_step_slugs,
+)
 from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.render import render_unit
 from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
@@ -298,7 +306,13 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run)
+                setup_odoo_venv(
+                    executor,
+                    instance_path,
+                    recreate=recreate,
+                    dry_run=dry_run,
+                    extra_args=tool_args(opts, "odoo-venv"),
+                )
             elif eff_type == "python":
                 if eff_requirements:
                     setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
@@ -325,7 +339,14 @@ def configure(  # noqa: C901
 
         if not conf_exists or recreate:
             typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
-            version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
+
+            # A `version` under tools.odoo-config short-circuits detection: it would
+            # override the flag anyway, and detection prompts when it comes up empty.
+            cli_overrides: dict[str, Any] = tool_args(opts, "odoo-config")
+            if "version" in cli_overrides:
+                version = cli_overrides["version"]
+            else:
+                version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
@@ -337,16 +358,23 @@ def configure(  # noqa: C901
             override_args = " ".join(f"--{key}={shlex.quote(str(value))}" for key, value in overrides.items())
 
             preset = opts.get("preset") or _detect_preset(instance_name)
-            preset_arg = f" --preset {shlex.quote(preset)}" if preset else ""
+
+            # odoo-config's own CLI options, as opposed to the odoo.conf value overrides
+            # above. The deploy.yml `tools.odoo-config` mapping is merged over these
+            # defaults, so each option is passed once.
+            cli_args: dict[str, Any] = {"version": version}
+            if preset:
+                cli_args["preset"] = preset
+            cli_args["instance-dir"] = instance_path
+            cli_args["config"] = conf_path
+            cli_args.update(cli_overrides)
 
             try:
                 executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
                 if conf_exists:
                     executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
                 executor.run(
-                    f"odoo-config create --version {shlex.quote(str(version))}{preset_arg} "
-                    f"--instance-dir={shlex.quote(instance_path)} "
-                    f"-c {conf_path} {override_args}",
+                    f"odoo-config create {render_cli_args(cli_args)} {override_args}",
                     dry_run=dry_run,
                 )
             except ExecutorError as exc:
