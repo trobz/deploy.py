@@ -157,8 +157,14 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
    - **`odoo`**: create if not present a virtual environment using `odoo-venv`, if
      there is `--recreate` option then re-create the venv:
      ```bash
-     odoo-venv create --project-dir ~/<instance_name> --preset project
+     odoo-venv create --project-dir ~/<instance_name> --preset project [<venv options>]
      ```
+     The `tools.odoo-venv` mapping in `deploy.yml` is rendered as `--<key> <value>` options
+     and merged over the two defaults above, so each option is passed exactly once: a
+     `project-dir` or `preset` key overrides the default, a `true` value renders a bare
+     `--<key>` flag, a `false` or null value drops the option, and a list value repeats it.
+     The `tools.odoo-config` mapping does the same for the `odoo-config create` invocation
+     of the `generate-config` step.
    - **`python` with `requirements`** (package mode): create a venv and install the listed
      packages directly:
      ```bash
