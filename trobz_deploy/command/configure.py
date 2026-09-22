@@ -338,7 +338,14 @@ def configure(  # noqa: C901
 
         if not conf_exists or recreate:
             typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
-            version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
+
+            # A `version` in the odoo_config mapping short-circuits detection: it would
+            # override the flag anyway, and detection prompts when it comes up empty.
+            cli_overrides: dict[str, Any] = opts.get("odoo_config") or {}
+            if "version" in cli_overrides:
+                version = cli_overrides["version"]
+            else:
+                version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
@@ -359,7 +366,7 @@ def configure(  # noqa: C901
                 cli_args["preset"] = preset
             cli_args["instance-dir"] = instance_path
             cli_args["config"] = conf_path
-            cli_args.update(opts.get("odoo_config") or {})
+            cli_args.update(cli_overrides)
 
             try:
                 executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)

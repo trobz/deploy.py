@@ -420,3 +420,25 @@ def test_config_step_repeats_list_valued_option(runner):
 
     assert result.exit_code == 0
     assert "--from /opt/base.conf --from /opt/extra.conf" in _odoo_config_create_cmd(mock_exec)
+
+
+def test_config_step_version_in_odoo_config_skips_detection(runner):
+    """A version in odoo_config must not trigger detection, which prompts when it finds nothing."""
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "config"],
+        cfg={"odoo_config": {"version": "20.0"}},
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    commands = _run_commands(mock_exec)
+    assert not any("odoo-addons-path" in cmd for cmd in commands)
+    assert not mock_exec.capture.call_args_list or all(
+        "odoo-addons-path" not in call.args[0] for call in mock_exec.capture.call_args_list
+    )
+    cmd = _odoo_config_create_cmd(mock_exec)
+    assert cmd.startswith("odoo-config create --version 20.0 ")
+    assert cmd.count("--version") == 1
