@@ -46,6 +46,13 @@ odoo-myproject-production:
     workers: 4
     limit_time_cpu: 600
 
+  # `odoo-venv create` options — merged over the built-in --project-dir / --preset
+  # defaults by `configure`, so each option is passed once. A matching key overrides
+  # the default; `true` renders as a bare flag; `false` / null drops the option.
+  venv:
+    odoo-dir: /opt/odoo/code/odoo/odoo/20.0/
+    addons-path: /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0
+
   # Environment variables — written to config/server.env by `configure`.
   # Merged over the built-in thread-limit defaults (the value here wins).
   env:
@@ -86,6 +93,7 @@ odoo-myproject-production:
 | `exec_start` | string | `configure` | Entry point for python/service systemd unit. |
 | `build` | string | `configure`, `update` | Build command for `service` type. |
 | `config` | mapping | `configure` | Odoo config overrides written to `config/odoo.conf` (Odoo only). |
+| `venv` | mapping | `configure` | `odoo-venv create` options as `--key value` (Odoo only), merged over the built-in `--project-dir`/`--preset` defaults. `true` renders a bare flag; `false`/null drops the option. |
 | `env` | mapping | `configure` | Environment variables written to `config/server.env`, merged over the built-in thread-limit defaults (Odoo only). |
 | `hooks` | mapping | `update` | Lifecycle hooks — see [Hooks](hooks.md). |
 

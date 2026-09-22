@@ -259,3 +259,103 @@ def test_dry_run_step_set_up_instance_dir_marks_mkdir(runner):
     calls = _run_calls(mock_exec)
     mkdir_call = next(c for c in calls if "mkdir -p" in c[0])
     assert mkdir_call[1].get("dry_run") is True
+
+
+def _odoo_venv_create_cmd(mock_exec) -> str:
+    return next(cmd for cmd in _run_commands(mock_exec) if "odoo-venv create" in cmd)
+
+
+def test_venv_step_without_extra_args(runner):
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "venv"],
+        cfg={},
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    assert _odoo_venv_create_cmd(mock_exec) == (
+        "odoo-venv create --project-dir /home/deploy/odoo-myapp-staging --preset project"
+    )
+
+
+def test_venv_step_appends_extra_args_from_config(runner):
+    cfg = {
+        "venv": {
+            "odoo-dir": "/opt/odoo/code/odoo/odoo/20.0/",
+            "addons-path": "/opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0",
+            "no-cache": True,
+            "backup": False,
+            "ignored": None,
+        }
+    }
+
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "venv"],
+        cfg=cfg,
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    assert _odoo_venv_create_cmd(mock_exec) == (
+        "odoo-venv create --project-dir /home/deploy/odoo-myapp-staging --preset project "
+        "--odoo-dir /opt/odoo/code/odoo/odoo/20.0/ "
+        "--addons-path /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0 "
+        "--no-cache"
+    )
+
+
+def test_venv_step_quotes_extra_arg_values(runner):
+    cfg = {"venv": {"odoo-dir": "/opt/odoo/my code/20.0"}}
+
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "venv"],
+        cfg=cfg,
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    assert _odoo_venv_create_cmd(mock_exec).endswith("--odoo-dir '/opt/odoo/my code/20.0'")
+
+
+def test_venv_step_overrides_builtin_option(runner):
+    cfg = {"venv": {"preset": "local"}}
+
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "venv"],
+        cfg=cfg,
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    # --preset appears once, with the overriding value.
+    assert _odoo_venv_create_cmd(mock_exec) == (
+        "odoo-venv create --project-dir /home/deploy/odoo-myapp-staging --preset local"
+    )
+
+
+def test_venv_step_drops_builtin_option_when_false(runner):
+    cfg = {"venv": {"preset": False}}
+
+    result, mock_exec = _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "venv"],
+        cfg=cfg,
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+    assert result.exit_code == 0
+    assert _odoo_venv_create_cmd(mock_exec) == ("odoo-venv create --project-dir /home/deploy/odoo-myapp-staging")

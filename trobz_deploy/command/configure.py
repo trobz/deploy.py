@@ -298,7 +298,13 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run)
+                setup_odoo_venv(
+                    executor,
+                    instance_path,
+                    recreate=recreate,
+                    dry_run=dry_run,
+                    extra_args=opts.get("venv") or {},
+                )
             elif eff_type == "python":
                 if eff_requirements:
                     setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
