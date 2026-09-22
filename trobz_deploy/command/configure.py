@@ -7,7 +7,14 @@ from typing import Annotated, Any
 
 import typer
 
-from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
+from trobz_deploy.utils.config import (
+    DeployType,
+    load_config,
+    parse_step_option,
+    render_cli_args,
+    resolve_options,
+    validate_step_slugs,
+)
 from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.render import render_unit
 from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
@@ -343,16 +350,23 @@ def configure(  # noqa: C901
             override_args = " ".join(f"--{key}={shlex.quote(str(value))}" for key, value in overrides.items())
 
             preset = opts.get("preset") or _detect_preset(instance_name)
-            preset_arg = f" --preset {shlex.quote(preset)}" if preset else ""
+
+            # odoo-config's own CLI options, as opposed to the odoo.conf value overrides
+            # above. The deploy.yml `odoo_config` mapping is merged over these defaults,
+            # so each option is passed once.
+            cli_args: dict[str, Any] = {"version": version}
+            if preset:
+                cli_args["preset"] = preset
+            cli_args["instance-dir"] = instance_path
+            cli_args["config"] = conf_path
+            cli_args.update(opts.get("odoo_config") or {})
 
             try:
                 executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
                 if conf_exists:
                     executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
                 executor.run(
-                    f"odoo-config create --version {shlex.quote(str(version))}{preset_arg} "
-                    f"--instance-dir={shlex.quote(instance_path)} "
-                    f"-c {conf_path} {override_args}",
+                    f"odoo-config create {render_cli_args(cli_args)} {override_args}",
                     dry_run=dry_run,
                 )
             except ExecutorError as exc:

@@ -46,6 +46,16 @@ odoo-myproject-production:
     workers: 4
     limit_time_cpu: 600
 
+  # `odoo-config create` command-line options — how the config is generated, as opposed
+  # to `config:` above, which sets the values inside it. Merged over the options
+  # `configure` passes by default (--version, --preset, --instance-dir, --config), so
+  # each one is passed once. A list value repeats the option.
+  odoo_config:
+    enterprise: true
+    output-format: all
+    from:
+      - /opt/odoo/shared/base.conf
+
   # `odoo-venv create` options — merged over the built-in --project-dir / --preset
   # defaults by `configure`, so each option is passed once. A matching key overrides
   # the default; `true` renders as a bare flag; `false` / null drops the option.
@@ -93,6 +103,7 @@ odoo-myproject-production:
 | `exec_start` | string | `configure` | Entry point for python/service systemd unit. |
 | `build` | string | `configure`, `update` | Build command for `service` type. |
 | `config` | mapping | `configure` | Odoo config overrides written to `config/odoo.conf` (Odoo only). |
+| `odoo_config` | mapping | `configure` | `odoo-config create` CLI options as `--key value` (Odoo only), merged over the built-in `--version`/`--preset`/`--instance-dir`/`--config`. `true` renders a bare flag, `false`/null drops the option, a list repeats it. Overrides the top-level `version`/`preset` keys. |
 | `venv` | mapping | `configure` | `odoo-venv create` options as `--key value` (Odoo only), merged over the built-in `--project-dir`/`--preset` defaults. `true` renders a bare flag; `false`/null drops the option. |
 | `env` | mapping | `configure` | Environment variables written to `config/server.env`, merged over the built-in thread-limit defaults (Odoo only). |
 | `hooks` | mapping | `update` | Lifecycle hooks — see [Hooks](hooks.md). |

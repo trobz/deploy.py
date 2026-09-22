@@ -1,28 +1,11 @@
 from __future__ import annotations
 
-import shlex
 from typing import Any
 
 import typer
 
+from trobz_deploy.utils.config import render_cli_args
 from trobz_deploy.utils.executor import Executor, ExecutorError
-
-
-def render_cli_args(args: dict[str, Any] | None) -> str:
-    """Render a mapping as ``--key value`` CLI options.
-
-    ``True`` renders as a bare ``--key`` flag; ``False`` and ``None`` are skipped.
-    Values are shell-quoted.
-    """
-    parts: list[str] = []
-    for key, value in (args or {}).items():
-        if value is None or value is False:
-            continue
-        if value is True:
-            parts.append(f"--{key}")
-        else:
-            parts.append(f"--{key} {shlex.quote(str(value))}")
-    return " ".join(parts)
 
 
 def _venv_exists(executor: Executor, instance_path: str, suffix: str = "") -> bool:

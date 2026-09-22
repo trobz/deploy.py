@@ -359,3 +359,64 @@ def test_venv_step_drops_builtin_option_when_false(runner):
 
     assert result.exit_code == 0
     assert _odoo_venv_create_cmd(mock_exec) == ("odoo-venv create --project-dir /home/deploy/odoo-myapp-staging")
+
+
+def _odoo_config_create_cmd(mock_exec) -> str:
+    return next(cmd for cmd in _run_commands(mock_exec) if "odoo-config create" in cmd)
+
+
+def _invoke_config_step(runner, cfg):
+    return _invoke(
+        runner,
+        "odoo-myapp-staging",
+        "odoo",
+        ["--steps", "config"],
+        cfg={"version": "17.0", **cfg},
+        executor_factory=_executor_mock_fresh_dir,
+    )
+
+
+def test_config_step_without_odoo_config_key(runner):
+    result, mock_exec = _invoke_config_step(runner, {})
+
+    assert result.exit_code == 0
+    cmd = _odoo_config_create_cmd(mock_exec)
+    assert cmd.startswith(
+        "odoo-config create --version 17.0 --preset staging "
+        "--instance-dir /home/deploy/odoo-myapp-staging "
+        "--config /home/deploy/odoo-myapp-staging/config/odoo.conf "
+    )
+    # odoo.conf value overrides still trail the CLI options.
+    assert "--db_user=odoo-myapp-staging" in cmd
+
+
+def test_config_step_appends_odoo_config_flags(runner):
+    result, mock_exec = _invoke_config_step(runner, {"odoo_config": {"enterprise": True, "output-format": "all"}})
+
+    assert result.exit_code == 0
+    cmd = _odoo_config_create_cmd(mock_exec)
+    assert "--enterprise --output-format all" in cmd
+    assert "--enterprise=True" not in cmd
+
+
+def test_config_step_overrides_builtin_cli_option(runner):
+    result, mock_exec = _invoke_config_step(runner, {"odoo_config": {"preset": "production"}})
+
+    assert result.exit_code == 0
+    cmd = _odoo_config_create_cmd(mock_exec)
+    assert "--preset production" in cmd
+    assert "--preset staging" not in cmd
+
+
+def test_config_step_drops_builtin_cli_option_when_false(runner):
+    result, mock_exec = _invoke_config_step(runner, {"odoo_config": {"preset": False}})
+
+    assert result.exit_code == 0
+    assert "--preset" not in _odoo_config_create_cmd(mock_exec)
+
+
+def test_config_step_repeats_list_valued_option(runner):
+    result, mock_exec = _invoke_config_step(runner, {"odoo_config": {"from": ["/opt/base.conf", "/opt/extra.conf"]}})
+
+    assert result.exit_code == 0
+    assert "--from /opt/base.conf --from /opt/extra.conf" in _odoo_config_create_cmd(mock_exec)
