@@ -115,8 +115,11 @@ def test_config_detects_version_from_addons_path(runner):
         if cmd == "echo $HOME":
             return "/home/deploy"
         if "odoo-addons-path" in cmd:
+            calls.append((cmd, cwd))
             return '{"layout": "Trobz", "version": "18.0"}'
         return ""
+
+    calls = []
 
     mock = _executor_mock(conf_exists=False)
     mock.capture.side_effect = capture
@@ -129,6 +132,9 @@ def test_config_detects_version_from_addons_path(runner):
     assert result.exit_code == 0
     create = next(c for c in _commands(mock) if c.startswith("odoo-config create"))
     assert "--version 18.0" in create
+    # The codebase is passed explicitly: odoo-addons-path no longer detects the CWD
+    [(cmd, cwd)] = calls
+    assert cmd.endswith(f" {cwd}")
 
 
 def test_config_no_preset_for_untyped_instance(runner):
