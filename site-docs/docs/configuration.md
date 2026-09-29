@@ -41,6 +41,12 @@ odoo-myproject-production:
     - myproject_staging
     - myproject_integration
 
+  # Where Odoo lives when it is not inside the project (odoo deployments). Passed to
+  # `odoo-addons-path` (systemd unit, `update`, version detection) as --odoo-dir / --addons-dir,
+  # and used to build the venv. `addons_dir` may also be a list.
+  odoo_dir: /opt/odoo/code/odoo/odoo/20.0/
+  addons_dir: /opt/odoo/code/odoo/enterprise/20.0,/opt/odoo/myproject
+
   # Odoo config overrides — written to config/odoo.conf by `configure`
   config:
     workers: 4
@@ -54,8 +60,7 @@ odoo-myproject-production:
   # while `tools.odoo-config` controls *how odoo-config is invoked*.
   tools:
     odoo-venv:                          # → odoo-venv create
-      odoo-dir: /opt/odoo/code/odoo/odoo/20.0/
-      addons-path: /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0
+      no-cache: true
     odoo-config:                        # → odoo-config create
       enterprise: true
       output-format: all
@@ -115,6 +120,7 @@ command-line options for them, keyed by tool:
 | Tool key | Command | Options deploy passes by default |
 |----------|---------|----------------------------------|
 | `odoo-venv` | `odoo-venv create` | `--project-dir`, `--preset project` |
+| `odoo-addons-path` | `odoo-addons-path` | `--odoo-dir` / `--addons-dir` from `odoo_dir` / `addons_dir` |
 | `odoo-config` | `odoo-config create` | `--version`, `--preset`, `--instance-dir`, `--config` |
 
 Your keys are merged over those defaults, so each option is passed exactly once:
@@ -128,17 +134,30 @@ Your keys are merged over those defaults, so each option is passed exactly once:
 ```yaml
 odoo-myproject-staging:
   tools:
-    odoo-venv:
-      odoo-dir: /opt/odoo/code/odoo/odoo/20.0/
-      addons-path: /opt/odoo/code/odoo/odoo/20.0/addons,/opt/odoo/code/odoo/enterprise/20.0
     odoo-config:
       enterprise: true
       version: 20.0
 ```
 
-`tools.odoo-config.version` also short-circuits version detection, so `configure` will not
-probe the codebase or prompt for it. It takes precedence over the top-level `version` and
-`preset` keys, which keep working.
+`odoo_dir` and `addons_dir` (instance level) are rendered as `odoo-addons-path --odoo-dir … --addons-dir …`
+wherever the add-ons path is resolved: the generated systemd unit (at every start), `update`, and
+`configure`'s version detection. `tools.odoo-addons-path` is merged over them for any other option
+or to override one. Don't set `addons_path` under `config:`; the unit computes it at start-up, so
+`configure` rejects it.
+
+When either is set, `configure` also resolves the add-ons path before creating the venv and passes
+`--odoo-dir` and `--addons-path` to `odoo-venv create`. With both given, `odoo-venv` skips its own
+layout detection, which would not find an Odoo source living outside the project. The add-ons
+path is recorded in the venv's `.odoo-venv.toml`. With the `project` preset, requirements are
+installed from the project's `requirements.txt`, not scanned from the add-ons dirs. Keys under `tools.odoo-venv` override the derived
+values. With neither set, `odoo-venv` runs with its defaults.
+
+`configure` reads `version` and `odoo_edition` from `odoo-addons-path --format=json` in the codebase:
+the version feeds `--version`, and an `EE` edition (an `enterprise` dir in the add-ons path, so
+`addons_dir` must include it) adds `--enterprise`. `tools.odoo-config.version` and
+`tools.odoo-config.enterprise` take precedence (`enterprise: false` drops the flag). When both are set
+the codebase is not probed at all, and `configure` will not prompt for the version. `tools.odoo-config.version`
+also takes precedence over the top-level `version` and `preset` keys, which keep working.
 
 Do not confuse `tools.odoo-config` with `config`: the former controls **how odoo-config is
 invoked**, the latter sets **values written into odoo.conf**. `odoo-config` treats any option
