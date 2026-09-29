@@ -53,6 +53,7 @@ def _invoke(
         patch("trobz_deploy.command.configure.Executor") as MockExecutor,
         patch("trobz_deploy.command.configure.load_config", return_value=cfg),
         patch("trobz_deploy.command.configure.render_unit", return_value="[Unit]\n"),
+        patch("trobz_deploy.command.configure._resolve_addons_path"),
     ):
         mock_exec = executor_factory()
         MockExecutor.return_value = mock_exec

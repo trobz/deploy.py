@@ -70,11 +70,66 @@ def test_configure_renders_tool_options_into_unit(runner):
         patch("trobz_deploy.command.configure.Executor", return_value=mock),
         patch("trobz_deploy.command.configure.load_config", return_value=CFG),
         patch("trobz_deploy.command.configure.render_unit", return_value="[Unit]\n") as render,
+        patch("trobz_deploy.command.configure._resolve_addons_path") as check,
     ):
         result = runner.invoke(app, ["configure", "odoo-myapp-staging", "--type", "odoo", "--steps", "unit"])
 
     assert result.exit_code == 0
     assert render.call_args.kwargs["addons_path_command"] == f"/usr/bin/odoo-addons-path {ARGS}"
+    assert check.call_args.args[1:] == (f"/usr/bin/odoo-addons-path {ARGS}", "/home/deploy/odoo-myapp-staging")
+
+
+def _unit_step(runner, addons_output: str, missing_dir: bool = False):
+    mock = _mock()
+
+    def capture(cmd, cwd=None, dry_run=False):
+        if cmd == "echo $HOME":
+            return "/home/deploy"
+        if cmd.startswith("which"):
+            return "/usr/bin/odoo-addons-path"
+        if "odoo-addons-path" in cmd:
+            return addons_output
+        return ""
+
+    def run(cmd, cwd=None, check=True, dry_run=False):
+        if cmd.startswith("test -f") or (missing_dir and cmd.startswith("test -d /b")):
+            msg = "not found"
+            raise ExecutorError(msg)
+        return ""
+
+    mock.capture.side_effect = capture
+    mock.run.side_effect = run
+    with (
+        patch("trobz_deploy.command.configure.Executor", return_value=mock),
+        patch("trobz_deploy.command.configure.load_config", return_value={}),
+        patch("trobz_deploy.command.configure.render_unit", return_value="[Unit]\n"),
+    ):
+        result = runner.invoke(app, ["configure", "odoo-myapp-staging", "--type", "odoo", "--steps", "unit"])
+    return result, mock
+
+
+def test_unit_step_accepts_valid_addons_path(runner):
+    result, mock = _unit_step(runner, "/a,/b")
+
+    assert result.exit_code == 0
+    assert any("test -d /a" in c.args[0] for c in mock.run.call_args_list)
+    mock.write_file.assert_called_once()
+
+
+def test_unit_step_aborts_on_empty_addons_path(runner):
+    result, mock = _unit_step(runner, "")
+
+    assert result.exit_code == 1
+    assert "returned no add-ons path" in result.output
+    mock.write_file.assert_not_called()
+
+
+def test_unit_step_aborts_when_addons_dir_missing(runner):
+    result, mock = _unit_step(runner, "/a,/b", missing_dir=True)
+
+    assert result.exit_code == 1
+    assert "Invalid add-ons path" in result.output
+    mock.write_file.assert_not_called()
 
 
 def test_configure_version_detection_uses_tool_options(runner):

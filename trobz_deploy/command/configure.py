@@ -145,6 +145,29 @@ def _detect_version(
     return detected or typer.prompt("Target Odoo version", default="19.0")
 
 
+def _resolve_addons_path(executor: Executor, addons_cmd: str, instance_path: str) -> str:
+    """Return the add-ons path ``addons_cmd`` yields, exiting unless it is a list of existing directories.
+
+    The systemd unit resolves the add-ons path at every start, and ``odoo-venv`` is given
+    it at creation; a bad value only shows up later (a service that will not start, a venv
+    recording the wrong path), so run the same command now.
+    """
+    error: Exception | None = None
+    out = ""
+    try:
+        out = executor.capture(f"{addons_cmd} {instance_path}", cwd=instance_path).strip()
+        for path in (p for p in out.split(",") if p):
+            executor.run(f"test -d {shlex.quote(path)}", cwd=instance_path)
+    except (ExecutorError, OSError) as exc:
+        error = exc
+    if error or not out:
+        reason = error or f"`{addons_cmd}` returned no add-ons path"
+        typer.echo(typer.style(f"Invalid add-ons path: {reason}", fg="red"), err=True)
+        typer.echo("Set `tools.odoo-addons-path` in deploy.yml so odoo-addons-path finds the code.", err=True)
+        raise typer.Exit(code=1) from error
+    return out
+
+
 def configure(  # noqa: C901
     ctx: typer.Context,
     instance_name: Annotated[str, typer.Argument()],
@@ -451,9 +474,10 @@ def configure(  # noqa: C901
                 template_vars["venv_path"] = venv_path
                 # Absolute binary path: the unit's shell has no PATH guarantee.
                 addons_path_bin = executor.capture("which odoo-addons-path")
-                template_vars["addons_path_command"] = addons_path_command(
-                    addons_path_bin, tool_args(opts, "odoo-addons-path")
-                )
+                addons_cmd = addons_path_command(addons_path_bin, tool_args(opts, "odoo-addons-path"))
+                template_vars["addons_path_command"] = addons_cmd
+                if not dry_run:
+                    _resolve_addons_path(executor, addons_cmd, unit_instance_path)
             else:
                 exec_start: str = opts.get("exec_start", "")
                 if not exec_start and not eff_requirements:
