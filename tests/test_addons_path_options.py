@@ -153,3 +153,69 @@ def test_configure_rejects_addons_path_in_config(runner):
 
     assert result.exit_code == 1
     assert "config.addons_path" in result.output
+
+
+def _venv_step(runner, cfg, addons_output: str = "/core/addons,/ee,/proj"):
+    mock = _mock()
+
+    def capture(cmd, cwd=None, dry_run=False):
+        if cmd == "echo $HOME":
+            return "/home/deploy"
+        if "odoo-addons-path" in cmd:
+            return addons_output
+        return ""
+
+    def run(cmd, cwd=None, check=True, dry_run=False):
+        if cmd.endswith("/.venv"):
+            msg = "not found"
+            raise ExecutorError(msg)
+        return ""
+
+    mock.capture.side_effect = capture
+    mock.run.side_effect = run
+    with (
+        patch("trobz_deploy.command.configure.Executor", return_value=mock),
+        patch("trobz_deploy.command.configure.load_config", return_value=cfg),
+    ):
+        result = runner.invoke(app, ["configure", "odoo-myapp-staging", "--type", "odoo", "--steps", "venv"])
+    return result, [c.args[0] for c in mock.run.call_args_list]
+
+
+def _venv_create(commands):
+    return next(c for c in commands if c.startswith("odoo-venv create"))
+
+
+def test_venv_gets_resolved_addons_path_and_odoo_dir(runner):
+    result, commands = _venv_step(runner, CFG)
+
+    assert result.exit_code == 0
+    assert _venv_create(commands) == (
+        "odoo-venv create --project-dir /home/deploy/odoo-myapp-staging --preset project "
+        "--odoo-dir /opt/odoo/odoo/17.0/ --addons-path /core/addons,/ee,/proj"
+    )
+
+
+def test_explicit_odoo_venv_keys_win_over_derived(runner):
+    cfg = {"tools": {**CFG["tools"], "odoo-venv": {"odoo-dir": "/custom", "addons-path": "/only"}}}
+
+    result, commands = _venv_step(runner, cfg)
+
+    assert result.exit_code == 0
+    create = _venv_create(commands)
+    assert "--odoo-dir /custom --addons-path /only" in create
+    assert "/opt/odoo/odoo/17.0/" not in create
+
+
+def test_venv_unchanged_without_addons_path_tool(runner):
+    result, commands = _venv_step(runner, {})
+
+    assert result.exit_code == 0
+    assert _venv_create(commands) == "odoo-venv create --project-dir /home/deploy/odoo-myapp-staging --preset project"
+
+
+def test_venv_aborts_when_addons_path_unresolvable(runner):
+    result, commands = _venv_step(runner, CFG, addons_output="")
+
+    assert result.exit_code == 1
+    assert "Invalid add-ons path" in result.output
+    assert not any(c.startswith("odoo-venv create") for c in commands)

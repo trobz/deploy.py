@@ -342,13 +342,19 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(
-                    executor,
-                    instance_path,
-                    recreate=recreate,
-                    dry_run=dry_run,
-                    extra_args=tool_args(opts, "odoo-venv"),
-                )
+                # When the add-ons path is configured, odoo-venv is handed it (and odoo-dir):
+                # given both, it skips its own layout detection, which cannot see an Odoo
+                # source living outside the project. Explicit tools.odoo-venv keys still win.
+                venv_args: dict[str, Any] = {}
+                addons_opts = tool_args(opts, "odoo-addons-path")
+                if addons_opts and not dry_run:
+                    if "odoo-dir" in addons_opts:
+                        venv_args["odoo-dir"] = addons_opts["odoo-dir"]
+                    venv_args["addons-path"] = _resolve_addons_path(
+                        executor, addons_path_command(args=addons_opts), instance_path
+                    )
+                venv_args.update(tool_args(opts, "odoo-venv"))
+                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run, extra_args=venv_args)
             elif eff_type == "python":
                 if eff_requirements:
                     setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
