@@ -122,14 +122,17 @@ def _detect_preset(instance_name: str) -> str | None:
     return next((p for p in INSTANCE_PRESETS if p in tokens), None)
 
 
-def _detect_version(
+def _detect_addons_info(
     executor: Executor,
     service_path: str,
     *,
     addons_path_args: dict[str, Any] | None = None,
     dry_run: bool = False,
-) -> str:
-    """Read the Odoo version from ``odoo-addons-path --format=json`` in the codebase, else prompt."""
+) -> dict[str, Any]:
+    """Read ``odoo-addons-path --format=json`` (version, odoo_edition, …) from the codebase.
+
+    Returns an empty dict when the tool fails or prints nothing usable.
+    """
     # OSError covers a missing service_path on the local executor (subprocess cwd= raises
     # before the command runs); the remote executor degrades to a non-zero ExecutorError.
     try:
@@ -138,11 +141,10 @@ def _detect_version(
             cwd=service_path,
             dry_run=dry_run,
         )
-        detected = json.loads(out).get("version", "") if out else ""
+        info = json.loads(out) if out else {}
     except (ExecutorError, OSError, json.JSONDecodeError):
-        detected = ""
-
-    return detected or typer.prompt("Target Odoo version", default="19.0")
+        return {}
+    return info if isinstance(info, dict) else {}
 
 
 def _resolve_addons_path(executor: Executor, addons_cmd: str, instance_path: str) -> str:
@@ -382,18 +384,21 @@ def configure(  # noqa: C901
         if not conf_exists or recreate:
             typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
 
-            # A `version` under tools.odoo-config short-circuits detection: it would
-            # override the flag anyway, and detection prompts when it comes up empty.
+            # `version` and `enterprise` come from `odoo-addons-path --format=json` (version and
+            # odoo_edition) unless deploy.yml already sets them: a `version` under
+            # tools.odoo-config would override the flag anyway, and detection prompts when empty.
             cli_overrides: dict[str, Any] = tool_args(opts, "odoo-config")
-            if "version" in cli_overrides:
-                version = cli_overrides["version"]
-            else:
-                version = opts.get("version") or _detect_version(
+            version = cli_overrides.get("version") or opts.get("version")
+            info: dict[str, Any] = {}
+            if not (version and "enterprise" in cli_overrides):
+                info = _detect_addons_info(
                     executor,
                     service_path,
                     addons_path_args=addons_path_options(opts),
                     dry_run=dry_run,
                 )
+            if not version:
+                version = info.get("version") or typer.prompt("Target Odoo version", default="19.0")
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
@@ -412,6 +417,8 @@ def configure(  # noqa: C901
             cli_args: dict[str, Any] = {"version": version}
             if preset:
                 cli_args["preset"] = preset
+            if info.get("odoo_edition") == "EE":
+                cli_args["enterprise"] = True
             cli_args["instance-dir"] = instance_path
             cli_args["config"] = conf_path
             cli_args.update(cli_overrides)

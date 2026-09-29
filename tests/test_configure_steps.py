@@ -429,14 +429,14 @@ def test_config_step_repeats_list_valued_option(runner):
     assert "--from /opt/base.conf --from /opt/extra.conf" in _odoo_config_create_cmd(mock_exec)
 
 
-def test_config_step_version_in_odoo_config_skips_detection(runner):
-    """A version in tools.odoo-config must not trigger detection, which prompts when it finds nothing."""
+def test_config_step_version_and_enterprise_in_odoo_config_skip_detection(runner):
+    """With both set in tools.odoo-config there is nothing left to detect."""
     result, mock_exec = _invoke(
         runner,
         "odoo-myapp-staging",
         "odoo",
         ["--steps", "config"],
-        cfg={"tools": {"odoo-config": {"version": "20.0"}}},
+        cfg={"tools": {"odoo-config": {"version": "20.0", "enterprise": False}}},
         executor_factory=_executor_mock_fresh_dir,
     )
 
