@@ -60,10 +60,8 @@ odoo-myproject-production:
   # while `tools.odoo-config` controls *how odoo-config is invoked*.
   tools:
     odoo-venv:                          # → odoo-venv create
-      no-cache: true
+      preset: demo
     odoo-config:                        # → odoo-config create
-      enterprise: true
-      output-format: all
       from:
         - /opt/odoo/shared/base.conf
 
@@ -134,15 +132,16 @@ Your keys are merged over those defaults, so each option is passed exactly once:
 ```yaml
 odoo-myproject-staging:
   tools:
+    odoo-venv:
+      preset: demo
     odoo-config:
-      enterprise: true
-      version: 20.0
+      from:
+        - /opt/odoo/shared/base.conf
 ```
 
 `odoo_dir` and `addons_dir` (instance level) are rendered as `odoo-addons-path --odoo-dir … --addons-dir …`
 wherever the add-ons path is resolved: the generated systemd unit (at every start), `update`, and
-`configure`'s version detection. `tools.odoo-addons-path` is merged over them for any other option
-or to override one. Don't set `addons_path` under `config:`; the unit computes it at start-up, so
+`configure`'s version detection. `tools.odoo-addons-path` is merged over them, to override one. Don't set `addons_path` under `config:`; the unit computes it at start-up, so
 `configure` rejects it.
 
 When either is set, `configure` also resolves the add-ons path before creating the venv and passes
