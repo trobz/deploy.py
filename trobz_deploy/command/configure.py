@@ -7,10 +7,12 @@ from typing import Annotated, Any
 
 import typer
 
+from trobz_deploy.utils.addons import addons_path_command
 from trobz_deploy.utils.config import (
     DeployType,
     load_config,
     parse_step_option,
+    reject_addons_path_in_config,
     render_cli_args,
     resolve_options,
     tool_args,
@@ -120,12 +122,22 @@ def _detect_preset(instance_name: str) -> str | None:
     return next((p for p in INSTANCE_PRESETS if p in tokens), None)
 
 
-def _detect_version(executor: Executor, service_path: str, *, dry_run: bool = False) -> str:
+def _detect_version(
+    executor: Executor,
+    service_path: str,
+    *,
+    addons_path_args: dict[str, Any] | None = None,
+    dry_run: bool = False,
+) -> str:
     """Read the Odoo version from ``odoo-addons-path --format=json`` in the codebase, else prompt."""
     # OSError covers a missing service_path on the local executor (subprocess cwd= raises
     # before the command runs); the remote executor degrades to a non-zero ExecutorError.
     try:
-        out = executor.capture("odoo-addons-path -v --format=json", cwd=service_path, dry_run=dry_run)
+        out = executor.capture(
+            f"{addons_path_command(args=addons_path_args)} -v --format=json",
+            cwd=service_path,
+            dry_run=dry_run,
+        )
         detected = json.loads(out).get("version", "") if out else ""
     except (ExecutorError, OSError, json.JSONDecodeError):
         detected = ""
@@ -214,6 +226,7 @@ def configure(  # noqa: C901
             deploy_type=deploy_type.value if deploy_type else None,
             repo_subdir=repo_subdir,
         )
+        reject_addons_path_in_config(opts)
     except ValueError as exc:
         typer.echo(typer.style(str(exc), fg="red"), err=True)
         raise typer.Exit(code=1) from exc
@@ -346,7 +359,12 @@ def configure(  # noqa: C901
             if "version" in cli_overrides:
                 version = cli_overrides["version"]
             else:
-                version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
+                version = opts.get("version") or _detect_version(
+                    executor,
+                    service_path,
+                    addons_path_args=tool_args(opts, "odoo-addons-path"),
+                    dry_run=dry_run,
+                )
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
@@ -431,8 +449,11 @@ def configure(  # noqa: C901
             }
             if eff_type == "odoo":
                 template_vars["venv_path"] = venv_path
-                odoo_addons_path = executor.capture("which odoo-addons-path")
-                template_vars["odoo_addons_path"] = odoo_addons_path
+                # Absolute binary path: the unit's shell has no PATH guarantee.
+                addons_path_bin = executor.capture("which odoo-addons-path")
+                template_vars["addons_path_command"] = addons_path_command(
+                    addons_path_bin, tool_args(opts, "odoo-addons-path")
+                )
             else:
                 exec_start: str = opts.get("exec_start", "")
                 if not exec_start and not eff_requirements:

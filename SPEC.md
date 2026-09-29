@@ -191,7 +191,7 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 
    - Unit file destination: `~/.config/systemd/user/<instance_name>.service`
    - Template variables per type:
-     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `odoo_addons_path`
+     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `addons_path_command`
      - **`python`**: `instance_name`, `instance_path`, `venv_path`, `exec_start`
      - **`service`**: `instance_name`, `instance_path`, `exec_start`
    - After writing the unit file, run:
@@ -507,7 +507,7 @@ Type=simple
 WorkingDirectory={{ instance_path }}
 ExecStart=bash -c "{{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
     --config {{ instance_path }}/config/odoo.conf \
-    --addons-path $({{ odoo_addons_path }} {{ instance_path }})"
+    --addons-path $({{ addons_path_command }} {{ instance_path }})"
 Restart=on-failure
 RestartSec=5s
 

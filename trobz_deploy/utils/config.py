@@ -18,6 +18,20 @@ def tool_args(opts: dict[str, Any], tool: str) -> dict[str, Any]:
     return tools.get(tool) or {}
 
 
+def reject_addons_path_in_config(opts: dict[str, Any]) -> None:
+    """Raise if deploy.yml sets ``addons_path`` under ``config``.
+
+    The add-ons path is resolved at start-up by the systemd unit; a fixed value in
+    odoo.conf would drift from it.
+    """
+    if "addons_path" in (opts.get("config") or {}):
+        msg = (
+            "`config.addons_path` must not be set: the systemd unit computes the add-ons path "
+            "at start-up. Configure `tools.odoo-addons-path` instead."
+        )
+        raise ValueError(msg)
+
+
 def render_cli_args(args: dict[str, Any] | None) -> str:
     """Render a mapping as ``--key value`` CLI options.
 
