@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 import typer
 
-from trobz_deploy.utils.addons import addons_path_command
+from trobz_deploy.utils.addons import addons_path_command, addons_path_options
 from trobz_deploy.utils.config import (
     DeployType,
     load_config,
@@ -346,7 +346,7 @@ def configure(  # noqa: C901
                 # given both, it skips its own layout detection, which cannot see an Odoo
                 # source living outside the project. Explicit tools.odoo-venv keys still win.
                 venv_args: dict[str, Any] = {}
-                addons_opts = tool_args(opts, "odoo-addons-path")
+                addons_opts = addons_path_options(opts)
                 if addons_opts and not dry_run:
                     if "odoo-dir" in addons_opts:
                         venv_args["odoo-dir"] = addons_opts["odoo-dir"]
@@ -391,7 +391,7 @@ def configure(  # noqa: C901
                 version = opts.get("version") or _detect_version(
                     executor,
                     service_path,
-                    addons_path_args=tool_args(opts, "odoo-addons-path"),
+                    addons_path_args=addons_path_options(opts),
                     dry_run=dry_run,
                 )
 
@@ -480,7 +480,7 @@ def configure(  # noqa: C901
                 template_vars["venv_path"] = venv_path
                 # Absolute binary path: the unit's shell has no PATH guarantee.
                 addons_path_bin = executor.capture("which odoo-addons-path")
-                addons_cmd = addons_path_command(addons_path_bin, tool_args(opts, "odoo-addons-path"))
+                addons_cmd = addons_path_command(addons_path_bin, addons_path_options(opts))
                 template_vars["addons_path_command"] = addons_cmd
                 if not dry_run:
                     _resolve_addons_path(executor, addons_cmd, unit_instance_path)

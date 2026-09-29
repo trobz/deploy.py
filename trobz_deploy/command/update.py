@@ -4,13 +4,12 @@ from typing import Annotated
 
 import typer
 
-from trobz_deploy.utils.addons import get_addons_path
+from trobz_deploy.utils.addons import addons_path_options, get_addons_path
 from trobz_deploy.utils.config import (
     DeployType,
     load_config,
     parse_step_option,
     resolve_options,
-    tool_args,
     validate_step_slugs,
 )
 from trobz_deploy.utils.executor import Executor, ExecutorError
@@ -262,7 +261,7 @@ def update(  # noqa: C901
     # Step 7: Update database (Odoo only)
     if eff_type == "odoo" and _run_step("db"):
         try:
-            addons_path = get_addons_path(executor, instance_path, tool_args(opts, "odoo-addons-path"))
+            addons_path = get_addons_path(executor, instance_path, addons_path_options(opts))
             if not modules:
                 extra_args = ""
                 if ignore_addons:

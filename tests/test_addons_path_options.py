@@ -219,3 +219,34 @@ def test_venv_aborts_when_addons_path_unresolvable(runner):
     assert result.exit_code == 1
     assert "Invalid add-ons path" in result.output
     assert not any(c.startswith("odoo-venv create") for c in commands)
+
+
+def test_addons_path_options_from_instance_keys():
+    from trobz_deploy.utils.addons import addons_path_options
+
+    assert addons_path_options({"odoo_dir": "/o", "addons_dir": ["/a", "/b"]}) == {
+        "odoo-dir": "/o",
+        "addons-dir": "/a,/b",
+    }
+    assert addons_path_options({}) == {}
+
+
+def test_tools_override_wins_over_instance_keys():
+    from trobz_deploy.utils.addons import addons_path_options
+
+    opts = {
+        "odoo_dir": "/o",
+        "addons_dir": "/a",
+        "tools": {"odoo-addons-path": {"odoo-dir": "/custom", "check-versions": True}},
+    }
+
+    assert addons_path_options(opts) == {"odoo-dir": "/custom", "addons-dir": "/a", "check-versions": True}
+
+
+def test_venv_and_unit_use_instance_level_keys(runner):
+    cfg = {"odoo_dir": "/opt/odoo/odoo/17.0/", "addons_dir": "/opt/odoo/enterprise/17.0,/opt/odoo/proj"}
+
+    result, commands = _venv_step(runner, cfg)
+
+    assert result.exit_code == 0
+    assert _venv_create(commands).endswith("--odoo-dir /opt/odoo/odoo/17.0/ --addons-path /core/addons,/ee,/proj")
