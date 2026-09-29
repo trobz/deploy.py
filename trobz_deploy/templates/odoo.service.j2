@@ -8,7 +8,7 @@ WorkingDirectory={{ instance_path }}
 EnvironmentFile=-{{ instance_path }}/config/server.env
 ExecStart=bash -c "{{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
     --config {{ instance_path }}/config/odoo.conf \
-    --addons-path $({{ odoo_addons_path }} {{ instance_path }})"
+    --addons-path $({{ addons_path_command }} {{ instance_path }})"
 Restart=on-failure
 RestartSec=5s
 

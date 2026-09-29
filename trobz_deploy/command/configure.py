@@ -7,7 +7,17 @@ from typing import Annotated, Any
 
 import typer
 
-from trobz_deploy.utils.config import DeployType, load_config, parse_step_option, resolve_options, validate_step_slugs
+from trobz_deploy.utils.addons import addons_path_command, addons_path_options
+from trobz_deploy.utils.config import (
+    DeployType,
+    load_config,
+    parse_step_option,
+    reject_addons_path_in_config,
+    render_cli_args,
+    resolve_options,
+    tool_args,
+    validate_step_slugs,
+)
 from trobz_deploy.utils.executor import Executor, ExecutorError
 from trobz_deploy.utils.render import render_unit
 from trobz_deploy.utils.venv import setup_odoo_venv, setup_package_venv, setup_python_venv
@@ -112,17 +122,52 @@ def _detect_preset(instance_name: str) -> str | None:
     return next((p for p in INSTANCE_PRESETS if p in tokens), None)
 
 
-def _detect_version(executor: Executor, service_path: str, *, dry_run: bool = False) -> str:
-    """Read the Odoo version from ``odoo-addons-path --format=json`` in the codebase, else prompt."""
+def _detect_addons_info(
+    executor: Executor,
+    service_path: str,
+    *,
+    addons_path_args: dict[str, Any] | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Read ``odoo-addons-path --format=json`` (version, odoo_edition, …) from the codebase.
+
+    Returns an empty dict when the tool fails or prints nothing usable.
+    """
     # OSError covers a missing service_path on the local executor (subprocess cwd= raises
     # before the command runs); the remote executor degrades to a non-zero ExecutorError.
     try:
-        out = executor.capture("odoo-addons-path -v --format=json", cwd=service_path, dry_run=dry_run)
-        detected = json.loads(out).get("version", "") if out else ""
+        out = executor.capture(
+            f"{addons_path_command(args=addons_path_args)} -v --format=json",
+            cwd=service_path,
+            dry_run=dry_run,
+        )
+        info = json.loads(out) if out else {}
     except (ExecutorError, OSError, json.JSONDecodeError):
-        detected = ""
+        return {}
+    return info if isinstance(info, dict) else {}
 
-    return detected or typer.prompt("Target Odoo version", default="19.0")
+
+def _resolve_addons_path(executor: Executor, addons_cmd: str, instance_path: str) -> str:
+    """Return the add-ons path ``addons_cmd`` yields, exiting unless it is a list of existing directories.
+
+    The systemd unit resolves the add-ons path at every start, and ``odoo-venv`` is given
+    it at creation; a bad value only shows up later (a service that will not start, a venv
+    recording the wrong path), so run the same command now.
+    """
+    error: Exception | None = None
+    out = ""
+    try:
+        out = executor.capture(f"{addons_cmd} {instance_path}", cwd=instance_path).strip()
+        for path in (p for p in out.split(",") if p):
+            executor.run(f"test -d {shlex.quote(path)}", cwd=instance_path)
+    except (ExecutorError, OSError) as exc:
+        error = exc
+    if error or not out:
+        reason = error or f"`{addons_cmd}` returned no add-ons path"
+        typer.echo(typer.style(f"Invalid add-ons path: {reason}", fg="red"), err=True)
+        typer.echo("Set `tools.odoo-addons-path` in deploy.yml so odoo-addons-path finds the code.", err=True)
+        raise typer.Exit(code=1) from error
+    return out
 
 
 def configure(  # noqa: C901
@@ -206,6 +251,7 @@ def configure(  # noqa: C901
             deploy_type=deploy_type.value if deploy_type else None,
             repo_subdir=repo_subdir,
         )
+        reject_addons_path_in_config(opts)
     except ValueError as exc:
         typer.echo(typer.style(str(exc), fg="red"), err=True)
         raise typer.Exit(code=1) from exc
@@ -298,7 +344,19 @@ def configure(  # noqa: C901
         typer.secho(f"\nSetting up {eff_type} environment…", fg="green")
         try:
             if eff_type == "odoo":
-                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run)
+                # When the add-ons path is configured, odoo-venv is handed it (and odoo-dir):
+                # given both, it skips its own layout detection, which cannot see an Odoo
+                # source living outside the project. Explicit tools.odoo-venv keys still win.
+                venv_args: dict[str, Any] = {}
+                addons_opts = addons_path_options(opts)
+                if addons_opts and not dry_run:
+                    if "odoo-dir" in addons_opts:
+                        venv_args["odoo-dir"] = addons_opts["odoo-dir"]
+                    venv_args["addons-path"] = _resolve_addons_path(
+                        executor, addons_path_command(args=addons_opts), instance_path
+                    )
+                venv_args.update(tool_args(opts, "odoo-venv"))
+                setup_odoo_venv(executor, instance_path, recreate=recreate, dry_run=dry_run, extra_args=venv_args)
             elif eff_type == "python":
                 if eff_requirements:
                     setup_package_venv(executor, instance_path, eff_requirements, dry_run=dry_run)
@@ -325,7 +383,22 @@ def configure(  # noqa: C901
 
         if not conf_exists or recreate:
             typer.secho(f"\n{CONFIGURE_STEPS['config']}…", fg="green")
-            version = opts.get("version") or _detect_version(executor, service_path, dry_run=dry_run)
+
+            # `version` and `enterprise` come from `odoo-addons-path --format=json` (version and
+            # odoo_edition) unless deploy.yml already sets them: a `version` under
+            # tools.odoo-config would override the flag anyway, and detection prompts when empty.
+            cli_overrides: dict[str, Any] = tool_args(opts, "odoo-config")
+            version = cli_overrides.get("version") or opts.get("version")
+            info: dict[str, Any] = {}
+            if not (version and "enterprise" in cli_overrides):
+                info = _detect_addons_info(
+                    executor,
+                    service_path,
+                    addons_path_args=addons_path_options(opts),
+                    dry_run=dry_run,
+                )
+            if not version:
+                version = info.get("version") or typer.prompt("Target Odoo version", default="19.0")
 
             overrides: dict[str, Any] = {
                 "db_user": instance_name,
@@ -337,16 +410,25 @@ def configure(  # noqa: C901
             override_args = " ".join(f"--{key}={shlex.quote(str(value))}" for key, value in overrides.items())
 
             preset = opts.get("preset") or _detect_preset(instance_name)
-            preset_arg = f" --preset {shlex.quote(preset)}" if preset else ""
+
+            # odoo-config's own CLI options, as opposed to the odoo.conf value overrides
+            # above. The deploy.yml `tools.odoo-config` mapping is merged over these
+            # defaults, so each option is passed once.
+            cli_args: dict[str, Any] = {"version": version}
+            if preset:
+                cli_args["preset"] = preset
+            if info.get("odoo_edition") == "EE":
+                cli_args["enterprise"] = True
+            cli_args["instance-dir"] = instance_path
+            cli_args["config"] = conf_path
+            cli_args.update(cli_overrides)
 
             try:
                 executor.run(f"mkdir -p {conf_dir}", dry_run=dry_run)
                 if conf_exists:
                     executor.run(f"mv {conf_path} {conf_path}.bak", dry_run=dry_run)
                 executor.run(
-                    f"odoo-config create --version {shlex.quote(str(version))}{preset_arg} "
-                    f"--instance-dir={shlex.quote(instance_path)} "
-                    f"-c {conf_path} {override_args}",
+                    f"odoo-config create {render_cli_args(cli_args)} {override_args}",
                     dry_run=dry_run,
                 )
             except ExecutorError as exc:
@@ -403,8 +485,12 @@ def configure(  # noqa: C901
             }
             if eff_type == "odoo":
                 template_vars["venv_path"] = venv_path
-                odoo_addons_path = executor.capture("which odoo-addons-path")
-                template_vars["odoo_addons_path"] = odoo_addons_path
+                # Absolute binary path: the unit's shell has no PATH guarantee.
+                addons_path_bin = executor.capture("which odoo-addons-path")
+                addons_cmd = addons_path_command(addons_path_bin, addons_path_options(opts))
+                template_vars["addons_path_command"] = addons_cmd
+                if not dry_run:
+                    _resolve_addons_path(executor, addons_cmd, unit_instance_path)
             else:
                 exec_start: str = opts.get("exec_start", "")
                 if not exec_start and not eff_requirements:

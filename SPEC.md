@@ -157,8 +157,14 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
    - **`odoo`**: create if not present a virtual environment using `odoo-venv`, if
      there is `--recreate` option then re-create the venv:
      ```bash
-     odoo-venv create --project-dir ~/<instance_name> --preset project
+     odoo-venv create --project-dir ~/<instance_name> --preset project [<venv options>]
      ```
+     The `tools.odoo-venv` mapping in `deploy.yml` is rendered as `--<key> <value>` options
+     and merged over the two defaults above, so each option is passed exactly once: a
+     `project-dir` or `preset` key overrides the default, a `true` value renders a bare
+     `--<key>` flag, a `false` or null value drops the option, and a list value repeats it.
+     The `tools.odoo-config` mapping does the same for the `odoo-config create` invocation
+     of the `generate-config` step.
    - **`python` with `requirements`** (package mode): create a venv and install the listed
      packages directly:
      ```bash
@@ -185,7 +191,7 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
 
    - Unit file destination: `~/.config/systemd/user/<instance_name>.service`
    - Template variables per type:
-     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `odoo_addons_path`
+     - **`odoo`**: `instance_name`, `instance_path`, `venv_path`, `addons_path_command`
      - **`python`**: `instance_name`, `instance_path`, `venv_path`, `exec_start`
      - **`service`**: `instance_name`, `instance_path`, `exec_start`
    - After writing the unit file, run:
@@ -501,7 +507,7 @@ Type=simple
 WorkingDirectory={{ instance_path }}
 ExecStart=bash -c "{{ venv_path }}/bin/python {{ venv_path }}/bin/odoo \
     --config {{ instance_path }}/config/odoo.conf \
-    --addons-path $({{ odoo_addons_path }} {{ instance_path }})"
+    --addons-path $({{ addons_path_command }} {{ instance_path }})"
 Restart=on-failure
 RestartSec=5s
 

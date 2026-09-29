@@ -1,10 +1,56 @@
 from __future__ import annotations
 
+import shlex
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+def tool_args(opts: dict[str, Any], tool: str) -> dict[str, Any]:
+    """Return the ``tools.<tool>`` mapping from deploy.yml, or an empty dict.
+
+    Each key under a tool is a command-line option for the tool that runs the step
+    (``odoo-venv`` → ``odoo-venv create``, ``odoo-config`` → ``odoo-config create``).
+    """
+    tools = opts.get("tools") or {}
+    return tools.get(tool) or {}
+
+
+def reject_addons_path_in_config(opts: dict[str, Any]) -> None:
+    """Raise if deploy.yml sets ``addons_path`` under ``config``.
+
+    The add-ons path is resolved at start-up by the systemd unit; a fixed value in
+    odoo.conf would drift from it.
+    """
+    if "addons_path" in (opts.get("config") or {}):
+        msg = (
+            "`config.addons_path` must not be set: the systemd unit computes the add-ons path "
+            "at start-up. Configure `tools.odoo-addons-path` instead."
+        )
+        raise ValueError(msg)
+
+
+def render_cli_args(args: dict[str, Any] | None) -> str:
+    """Render a mapping as ``--key value`` CLI options.
+
+    ``True`` renders as a bare ``--key`` flag; ``False`` and ``None`` are skipped.
+    A list value repeats the option once per item, for additive options such as
+    ``--from``. Values are shell-quoted.
+    """
+    parts: list[str] = []
+    for key, value in (args or {}).items():
+        if value is None or value is False:
+            continue
+        if value is True:
+            parts.append(f"--{key}")
+        elif isinstance(value, list):
+            parts.extend(f"--{key} {shlex.quote(str(item))}" for item in value)
+        else:
+            parts.append(f"--{key} {shlex.quote(str(value))}")
+    return " ".join(parts)
+
 
 KNOWN_ENVS: frozenset[str] = frozenset({"integration", "staging", "production", "hotfix", "debug", "demo"})
 
