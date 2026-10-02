@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.23.4 (2026-10-02)
+
+### Bug Fixes
+
+- Pass the codebase explicitly to odoo-addons-path
+  ([`b5c7688`](https://github.com/trobz/deploy.py/commit/b5c7688222bc26c5f9a731a2370d4588ed53684e))
+
+
 ## v0.23.3 (2026-09-09)
 
 ### Bug Fixes
