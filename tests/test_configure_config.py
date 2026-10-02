@@ -111,10 +111,13 @@ def test_config_defaults_version_when_undetectable(runner):
 def test_config_detects_version_from_addons_path(runner):
     """When no version is configured, read it from `odoo-addons-path --format=json`."""
 
+    calls = []
+
     def capture(cmd, cwd=None, dry_run=False):
         if cmd == "echo $HOME":
-            return "/home/deploy"
+            return "/home/my deploy"
         if "odoo-addons-path" in cmd:
+            calls.append((cmd, cwd))
             return '{"layout": "Trobz", "version": "18.0"}'
         return ""
 
@@ -129,6 +132,13 @@ def test_config_detects_version_from_addons_path(runner):
     assert result.exit_code == 0
     create = next(c for c in _commands(mock) if c.startswith("odoo-config create"))
     assert "--version 18.0" in create
+    # The codebase is passed explicitly: odoo-addons-path no longer detects the CWD
+    assert calls == [
+        (
+            "odoo-addons-path -v --format=json '/home/my deploy/odoo-myapp-staging'",
+            "/home/my deploy/odoo-myapp-staging",
+        )
+    ]
 
 
 def test_config_no_preset_for_untyped_instance(runner):

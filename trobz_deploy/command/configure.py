@@ -117,7 +117,9 @@ def _detect_version(executor: Executor, service_path: str, *, dry_run: bool = Fa
     # OSError covers a missing service_path on the local executor (subprocess cwd= raises
     # before the command runs); the remote executor degrades to a non-zero ExecutorError.
     try:
-        out = executor.capture("odoo-addons-path -v --format=json", cwd=service_path, dry_run=dry_run)
+        out = executor.capture(
+            f"odoo-addons-path -v --format=json {shlex.quote(service_path)}", cwd=service_path, dry_run=dry_run
+        )
         detected = json.loads(out).get("version", "") if out else ""
     except (ExecutorError, OSError, json.JSONDecodeError):
         detected = ""
