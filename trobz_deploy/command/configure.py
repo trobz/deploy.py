@@ -40,7 +40,10 @@ def _ensure_postgres_user(
     password: str | None = None,
     dry_run: bool = False,
 ) -> None:
-    """Create a Postgres superuser role for the instance, if it doesn't already exist.
+    """Create a Postgres role for the instance, if it doesn't already exist.
+
+    The role gets createuser's defaults: no superuser, no createdb, no
+    createrole. Databases are not created by Odoo itself.
 
     The role name is *db_user* when given (the db_user from deploy.yml, so it
     matches odoo.conf), else the instance name. Uses *password* when given,
@@ -60,7 +63,7 @@ def _ensure_postgres_user(
     pw = password if provided else secrets.token_urlsafe(16)
     generated = not provided
 
-    executor.run(f"createuser --no-createrole --superuser {role}")
+    executor.run(f"createuser {role}")
     executor.run(f'psql -d postgres -c "ALTER ROLE \\"{role}\\" WITH PASSWORD \'{pw}\'"')
 
     if generated:
