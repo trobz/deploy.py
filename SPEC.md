@@ -144,10 +144,11 @@ Steps 2–6 each correspond to a `--steps` / `--except` slug, shown in **bold**.
    psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='<instance_name>'" -d postgres
    ```
    - If it exists, do nothing.
-   - If it does not exist, create it as a superuser role and set a strong, randomly generated
-     password:
+   - If it does not exist, create it as a plain role (createuser defaults: no superuser,
+     no createdb, no createrole — databases are not created by Odoo itself) and set a
+     strong, randomly generated password:
      ```bash
-     createuser --no-createrole --superuser <instance_name>
+     createuser <instance_name>
      psql -d postgres -c "ALTER ROLE \"<instance_name>\" WITH PASSWORD '<generated>'"
      ```
      The generated password is printed once to the console and is not stored anywhere by `deploy`.

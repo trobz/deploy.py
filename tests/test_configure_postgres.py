@@ -49,7 +49,7 @@ def test_ensure_postgres_user_creates_role_with_password_when_missing(capsys):
     assert executor.run.call_count == 2
     createuser_cmd, alter_role_cmd = (call.args[0] for call in executor.run.call_args_list)
 
-    assert createuser_cmd == "createuser --no-createrole --superuser odoo-foo-staging"
+    assert createuser_cmd == "createuser odoo-foo-staging"
     assert alter_role_cmd.startswith('psql -d postgres -c "ALTER ROLE \\"odoo-foo-staging\\" WITH PASSWORD \'')
     assert alter_role_cmd.endswith("'\"")
 
