@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.23.5 (2026-11-18)
+
+### Bug Fixes
+
+- Create the instance postgres role without superuser
+  ([`54ad7b0`](https://github.com/trobz/deploy.py/commit/54ad7b0e03eeacf0e3a095068b68826d5cf10287))
+
+
 ## v0.23.4 (2026-10-02)
 
 ### Bug Fixes
